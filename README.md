@@ -22,7 +22,23 @@ pip install -r requirements.txt
 ```
 ### Dataset
 Download data. You can obtain four benchmarks from [Tsinghua Cloud](https://cloud.tsinghua.edu.cn/d/9605612594f0423f891e/) or [Google Cloud](https://drive.google.com/drive/folders/1gisthCoE-RrKJ0j3KPV7xiibhHWT9qRm?usp=sharing). **All the datasets are well pre-processed**. For the SWaT dataset, you can apply for it by following its official tutorial.
+
 #### DBsherlock
+Download SMD, SMAP, PSM, and MSL dataset
+```bash
+python scripts/download_datasets.py
+```
+Download DBSherlock dataset
+```bash
+wget -P dataset/original_dataset/ https://github.com/dongyoungy/dbsherlock-reproducibility/raw/master/datasets/dbsherlock_dataset_tpcc_16w.mat
+
+wget -P dataset/original_dataset/ https://github.com/dongyoungy/dbsherlock-reproducibility/raw/master/datasets/dbsherlock_dataset_tpcc_500w.mat
+
+wget -P dataset/original_dataset/ https://github.com/dongyoungy/dbsherlock-reproducibility/raw/master/datasets/dbsherlock_dataset_tpce_3000.mat
+```
+
+Preprocess data
+
 - To train and evaluate a model using the DBsherlock dataset, a dataset converted from the .mat file to a json file is required. Place the corresponding json file in the `Anomaly_Explanation/dataset/converted_dataset` directory.
 - You can generate training datasets, validation sets, and test sets using the following command. The `--input_path` allows you to specify the path to the DBsherlock dataset json file. The `--output_path` allows you to specify the folder where the processed data will be saved.
 ```bash
