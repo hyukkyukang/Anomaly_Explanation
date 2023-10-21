@@ -344,7 +344,7 @@ class DBSSegLoader(object):
     def _filter_data(
         self, data: List[Any], labels, classes, cause: str
     ) -> Tuple[List, List, List]:
-        if self.cause == "all":
+        if self.cause == "combined":
             return data, labels, classes
         else:
             # Filter

@@ -4,7 +4,7 @@ import os
 from torch.backends import cudnn
 
 from src.data_factory.dbsherlock.utils import anomaly_causes
-from src.solver import Solver
+from src.solver2 import Solver
 from utils.utils import *
 
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--anormly_ratio", type=float, default=4.00)
     parser.add_argument("--step_size", type=int, default=25)
     parser.add_argument(
-        "--cause", type=str, default="all", choices=["all"] + anomaly_causes
+        "--cause", type=str, default="combined", choices=["combined"] + anomaly_causes
     )
 
     config = parser.parse_args()
