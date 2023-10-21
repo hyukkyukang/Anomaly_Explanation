@@ -373,18 +373,26 @@ class DBSSegLoader(object):
 
     def __getitem__(self, index) -> Tuple[np.ndarray, np.ndarray]:
         if self.mode == "train":
-            return np.float32(self.train_data[index]), np.float32(
-                self.train_labels[index]
+            return (
+                np.float32(self.train_data[index]),
+                np.float32(self.train_labels[index]),
+                self.train_classes[index],
             )
         elif self.mode == "val":
-            return np.float32(self.val_data[index]), np.float32(self.val_labels[index])
+            return np.float32(self.val_data[index]), np.float32(
+                self.val_labels[index], self.val_classes[index]
+            )
         elif self.mode == "test":
-            return np.float32(self.test_data[index]), np.float32(
-                self.test_labels[index]
+            return (
+                np.float32(self.test_data[index]),
+                np.float32(self.test_labels[index]),
+                np.float32(self.test_classes[index]),
             )
         else:
-            return np.float32(self.test_data_threshold[index]), np.float32(
-                self.test_labels_threshold[index]
+            return (
+                np.float32(self.test_data_threshold[index]),
+                np.float32(self.test_labels_threshold[index]),
+                np.float32(self.test_classes_threshold[index]),
             )
 
     def _load_pickle(self, path: str) -> List[Union[np.ndarray, int]]:

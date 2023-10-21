@@ -44,7 +44,10 @@ if __name__ == "__main__":
     parser.add_argument("--anormly_ratio", type=float, default=4.00)
     parser.add_argument("--step_size", type=int, default=25)
     parser.add_argument(
-        "--cause", type=str, default="combined", choices=["combined"] + anomaly_causes
+        "--cause",
+        type=str,
+        default="combined",
+        choices=["indi", "combined"] + anomaly_causes,
     )
 
     config = parser.parse_args()
