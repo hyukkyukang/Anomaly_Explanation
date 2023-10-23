@@ -7,8 +7,9 @@ import hkkang_utils.file as file_utils
 import hkkang_utils.list as list_utils
 import numpy as np
 import torch
+from sklearn.preprocessing import StandardScaler
 
-from data_factory.data import anomaly_causes
+from data_factory.data import ANOMALY_CAUSES
 from src.data_factory.data import AnomalyData, AnomalyDataset
 
 SKIP_CAUSES = ["Poor Physical Design"]
@@ -39,7 +40,7 @@ class DBSherlockDataset(torch.utils.data.Dataset):
         self.mode = mode
         self.step = step
         self.win_size = win_size
-        self.data_split_ratio = (0.8, 0.1, 0.1)
+        self.data_split_ratio = (0.7, 0.1, 0.2)
         self.time_segments: List[TimeSegment] = []
         self.skip_causes = skip_causes if skip_causes else []
         self.__post__init__()
@@ -59,16 +60,20 @@ class DBSherlockDataset(torch.utils.data.Dataset):
             data_list = test_data_list
         else:
             data_list = test_data_list
+        data_for_fitting = train_data_list
 
         # Create time segments
         logger.info(f"Creating time segments for {self.mode} mode")
         self.time_segments = list_utils.do_flatten_list(
             [self.create_time_segments(d) for d in data_list]
         )
+        segments_for_fitting = list_utils.do_flatten_list(
+            [self.create_time_segments(d) for d in data_for_fitting]
+        )
 
         # Scale values
         logger.info(f"Scaling values for {self.mode} mode")
-        self.scale_values()
+        self.scale_values(segments_for_fitting=segments_for_fitting)
         logger.info(
             f"{self.mode} dataset is ready! ({len(self)} time segments from {len(data_list)} anomaly data)\n"
         )
@@ -148,15 +153,17 @@ class DBSherlockDataset(torch.utils.data.Dataset):
                 idx in data.valid_abnormal_regions
                 for idx in range(start_time, end_time)
             ]
-            cause = anomaly_causes.index(data.cause)
+            cause = ANOMALY_CAUSES.index(data.cause)
             anomaly_cause = [
-                cause if is_anomaly[idx] else None for idx in range(self.win_size)
+                cause if is_anomaly[idx] else 0 for idx in range(self.win_size)
             ]
             segments.append(
                 TimeSegment(
                     start_time=start_time,
                     end_time=end_time,
-                    value=np.array(value),
+                    value=np.array(value)[
+                        :, 2:
+                    ],  # We ignore first two attributes (following DBSherlock)
                     is_anomaly=is_anomaly,
                     is_overlap=is_overlap,
                     anomaly_cause=anomaly_cause,
@@ -166,30 +173,18 @@ class DBSherlockDataset(torch.utils.data.Dataset):
         return segments
 
     def scale_values(
-        self, means: Optional[List[float]] = None
+        self, segments_for_fitting: List[TimeSegment]
     ) -> Union[List[float], None]:
+        scaler = StandardScaler()
+
         # Check attribute size of all time segments are the same
-        assert len(set([s.value.shape[1] for s in self.time_segments])) == 1
+        assert len(set([s.value.shape[1] for s in segments_for_fitting])) == 1
 
         # Calculate means for each attribute
-        if means is None:
-            means = [0] * self.time_segments[0].value.shape[1]
-            cnts = [0] * self.time_segments[0].value.shape[1]
-            # Sum and count all values
-            for time_segment in self.time_segments:
-                for att_idx in range(time_segment.value.shape[1]):
-                    means[att_idx] += sum(time_segment.value[:, att_idx])
-                    cnts[att_idx] += len(time_segment.value[:, att_idx])
-            # Division
-            for idx in range(len(means)):
-                means[idx] /= cnts[idx]
+        values = np.vstack([seg.value for seg in segments_for_fitting])
 
-        # Check the size of means is valid
-        assert (
-            len(means) == self.time_segments[0].value.shape[1]
-        ), f"Invalid shape for means: {len(means)} vs {self.time_segments[0].value.shape[1]}"
+        scaler.fit(values)
 
-        # Scale all values using the means
+        # Scale all values
         for time_segment in self.time_segments:
-            for att_idx in range(time_segment.value.shape[1]):
-                time_segment.value[:, att_idx] -= means[att_idx]
+            time_segment.value = scaler.transform(time_segment.value)

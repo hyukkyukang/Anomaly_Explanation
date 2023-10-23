@@ -13,12 +13,13 @@
             "justMyCode": true,
             "args": [
                 "--anormly_ratio=4",
-                "--num_epochs=20",
-                "--batch_size=8",
+                "--num_epochs=100",
+                "--batch_size=512",
                 "--mode=train",
                 "--dataset=DBS",
                 "--win_size=25",
                 "--step_size=25",
+                // "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
                 "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
             ]
         },
@@ -31,10 +32,11 @@
             "justMyCode": true,
             "args": [
                 "--anormly_ratio=4",
-                "--num_epochs=10",
+                "--num_epochs=100",
                 "--batch_size=512",
                 "--mode=test",
                 "--dataset=DBS",
+                // "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
                 "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
                 "--input_c=200",
                 "--output_c=200",

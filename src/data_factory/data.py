@@ -4,7 +4,8 @@ from typing import *
 import hkkang_utils.data as data_utils
 import numpy as np
 
-anomaly_causes = [
+ANOMALY_CAUSES = [
+    "No Anomaly",
     "Poorly Written Query",
     "Poor Physical Design",
     "Workload Spike",

@@ -13,8 +13,8 @@ logger = logging.getLogger("main")
 def main(config):
     cudnn.benchmark = True
     # Create directories if not exist
-    if not os.path.exists(config.model_save_path):
-        mkdir(config.model_save_path)
+    if not os.path.exists(config.model_dir_path):
+        mkdir(config.model_dir_path)
 
     # Create solver
     solver = Solver(vars(config))
@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument(
         "--data_path", type=str, default="./dataset/dbsherlock/processed/tpce_3000"
     )
-    parser.add_argument("--model_save_path", type=str, default="checkpoints")
+    parser.add_argument("--model_dir_path", type=str, default="checkpoints")
     parser.add_argument("--anormly_ratio", type=float, default=4.00)
     parser.add_argument("--step_size", type=int, default=25)
     parser.add_argument("--find_best", type=bool, default=True)
