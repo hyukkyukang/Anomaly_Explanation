@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--num_epochs", type=int, default=10)
+    parser.add_argument("--num_epochs", type=int, default=20)
     parser.add_argument("--k", type=int, default=3)
     parser.add_argument("--win_size", type=int, default=25)
     parser.add_argument("--input_c", type=int, default=200)

@@ -1,12 +1,50 @@
+import os
+import time
+from typing import *
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import os
-import time
-from utils.utils import *
-from model.AnomalyTransformer import AnomalyTransformer
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+
 from data_factory.data_loader import get_loader_segment
+from model.AnomalyTransformer import AnomalyTransformer
+from utils.utils import *
+
+
+def calculate_classification_accuracy(cls_probs, classes, labels) -> Tuple[int, int]:
+    if type(cls_probs) == np.ndarray and len(cls_probs.shape) == 1:
+        predicted = cls_probs
+        gold = classes
+    else:
+        _, predicted = torch.max(cls_probs.data, 2)
+        _, gold = torch.max(classes, 2)
+
+    # Filter only anomaly regions
+    predicted_for_anomaly_regions = predicted[labels == 1]
+    gold_for_anomaly_regions = gold[labels == 1]
+    if type(gold_for_anomaly_regions) == torch.Tensor:
+        gold_for_anomaly_regions = gold_for_anomaly_regions.cuda()
+
+    # Count correct
+    cls_correct_cnt = (
+        (predicted_for_anomaly_regions == gold_for_anomaly_regions).sum().item()
+    )
+    cls_total_num_cnt = len(predicted_for_anomaly_regions)
+
+    (
+        cls_precision,
+        cls_recall,
+        cls_f_score,
+        cls_support,
+    ) = precision_recall_fscore_support(
+        gold_for_anomaly_regions,
+        predicted_for_anomaly_regions,
+        average="micro",
+    )
+
+    return cls_correct_cnt, cls_total_num_cnt
 
 
 def my_kl_loss(p, q):
@@ -32,6 +70,8 @@ class EarlyStopping:
         self.counter = 0
         self.best_score = None
         self.best_score2 = None
+        self.best_score3 = None
+        self.best_accuracy = None
         self.early_stop = False
         self.val_loss_min = np.Inf
         self.val_loss2_min = np.Inf
@@ -39,16 +79,23 @@ class EarlyStopping:
         self.dataset = dataset_name
         self.cause = cause
 
-    def __call__(self, val_loss, val_loss2, model, path):
+    def __call__(self, val_loss, val_loss2, val_loss3, accuracy, model, path):
         score = -val_loss
         score2 = -val_loss2
+        score3 = -val_loss3
         if self.best_score is None:
             self.best_score = score
             self.best_score2 = score2
-            self.save_checkpoint(val_loss, val_loss2, model, path)
+            self.best_score3 = score3
+            self.best_accuracy = accuracy
+            self.save_checkpoint(val_loss, val_loss2, val_loss3, model, path)
         elif (
-            score < self.best_score + self.delta
-            or score2 < self.best_score2 + self.delta
+            (
+                score < self.best_score + self.delta
+                or score2 < self.best_score2 + self.delta
+            )
+            and score3 < self.best_score3 + self.delta
+            and accuracy < self.best_accuracy + self.delta
         ):
             self.counter += 1
             print(f"EarlyStopping counter: {self.counter} out of {self.patience}")
@@ -57,10 +104,12 @@ class EarlyStopping:
         else:
             self.best_score = score
             self.best_score2 = score2
-            self.save_checkpoint(val_loss, val_loss2, model, path)
+            self.best_score3 = score3
+            self.best_accuracy = accuracy
+            self.save_checkpoint(val_loss, val_loss2, val_loss3, model, path)
             self.counter = 0
 
-    def save_checkpoint(self, val_loss, val_loss2, model, path):
+    def save_checkpoint(self, val_loss, val_loss2, val_loss3, model, path):
         if self.verbose:
             print(
                 f"Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ..."
@@ -76,6 +125,7 @@ class EarlyStopping:
         )
         self.val_loss_min = val_loss
         self.val_loss2_min = val_loss2
+        self.val_loss3_min = val_loss3
 
 
 class Solver(object):
@@ -123,6 +173,8 @@ class Solver(object):
         self.build_model()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss()
+        self.criterion2 = nn.CrossEntropyLoss()
+        self.softmax = nn.Softmax(dim=2)
 
     def build_model(self):
         self.model = AnomalyTransformer(
@@ -133,14 +185,18 @@ class Solver(object):
         if torch.cuda.is_available():
             self.model.cuda()
 
-    def vali(self, vali_loader):
+    def vali(self, data_loader):
         self.model.eval()
 
         loss_1 = []
         loss_2 = []
-        for i, (input_data, _) in enumerate(vali_loader):
+        loss_3 = []
+        all_accuracy = []
+        cls_num_cnt = 0
+        cls_correct_cnt = 0
+        for i, (input_data, labels, classes) in enumerate(data_loader):
             input = input_data.float().to(self.device)
-            output, series, prior, _ = self.model(input)
+            cls_output, output, series, prior, _ = self.model(input)
             series_loss = 0.0
             prior_loss = 0.0
             for u in range(len(prior)):
@@ -188,12 +244,23 @@ class Solver(object):
                 )
             series_loss = series_loss / len(prior)
             prior_loss = prior_loss / len(prior)
-
             rec_loss = self.criterion(output, input)
+            cls_probs = self.softmax(cls_output)
+            cls_loss = self.criterion2(cls_probs, classes.cuda())
             loss_1.append((rec_loss - self.k * series_loss).item())
             loss_2.append((rec_loss + self.k * prior_loss).item())
+            loss_3.append(cls_loss.item())
 
-        return np.average(loss_1), np.average(loss_2)
+            # Accumulate accuracy
+            correct_cnt, total_cnt = calculate_classification_accuracy(
+                cls_probs, classes, labels
+            )
+            cls_correct_cnt += correct_cnt
+            cls_num_cnt += total_cnt
+
+        accuracy = cls_correct_cnt / cls_num_cnt
+
+        return np.average(loss_1), np.average(loss_2), np.average(loss_3), accuracy
 
     def train(self):
         print("======================TRAIN MODE======================")
@@ -203,7 +270,7 @@ class Solver(object):
         if not os.path.exists(path):
             os.makedirs(path)
         early_stopping = EarlyStopping(
-            patience=3, verbose=True, dataset_name=self.dataset, cause=self.cause
+            patience=20, verbose=True, dataset_name=self.dataset, cause=self.cause
         )
         train_steps = len(self.train_loader)
 
@@ -213,12 +280,12 @@ class Solver(object):
 
             epoch_time = time.time()
             self.model.train()
-            for i, (input_data, labels) in enumerate(self.train_loader):
+            for i, (input_data, labels, classes) in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
                 iter_count += 1
                 input = input_data.float().to(self.device)
 
-                output, series, prior, _ = self.model(input)
+                cls_out, output, series, prior, _ = self.model(input)
 
                 # calculate Association discrepancy
                 series_loss = 0.0
@@ -270,10 +337,19 @@ class Solver(object):
                 prior_loss = prior_loss / len(prior)
 
                 rec_loss = self.criterion(output, input)
+                cls_probs = self.softmax(cls_out)
+                # Filter only anomaly regions
+                cls_probs_for_anomaly_regions = cls_probs[labels == 1]
+                classes_for_anomaly_regions = classes[labels == 1]
+                classification_loss = self.criterion2(
+                    cls_probs_for_anomaly_regions, classes_for_anomaly_regions.cuda()
+                )
 
                 loss1_list.append((rec_loss - self.k * series_loss).item())
                 loss1 = rec_loss - self.k * series_loss
                 loss2 = rec_loss + self.k * prior_loss
+                # Classification loss
+                loss3 = classification_loss
 
                 if (i + 1) % 100 == 0:
                     speed = (time.time() - time_now) / iter_count
@@ -288,20 +364,23 @@ class Solver(object):
 
                 # Minimax strategy
                 loss1.backward(retain_graph=True)
-                loss2.backward()
+                loss2.backward(retain_graph=True)
+                loss3.backward()
                 self.optimizer.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(loss1_list)
 
-            vali_loss1, vali_loss2 = self.vali(self.test_loader)
+            vali_loss1, vali_loss2, vali_loss3, accuracy = self.vali(self.test_loader)
 
             print(
-                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} ".format(
-                    epoch + 1, train_steps, train_loss, vali_loss1
+                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Vali acc: {4:.7f} ".format(
+                    epoch + 1, train_steps, train_loss, vali_loss1, accuracy
                 )
             )
-            early_stopping(vali_loss1, vali_loss2, self.model, path)
+            early_stopping(
+                vali_loss1, vali_loss2, vali_loss3, accuracy, self.model, path
+            )
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -327,9 +406,9 @@ class Solver(object):
 
         # (1) stastic on the train set
         attens_energy = []
-        for i, (input_data, labels) in enumerate(self.train_loader):
+        for i, (input_data, labels, classes) in enumerate(self.train_loader):
             input = input_data.float().to(self.device)
-            output, series, prior, _ = self.model(input)
+            cls_output, output, series, prior, _ = self.model(input)
             loss = torch.mean(criterion(input, output), dim=-1)
             series_loss = 0.0
             prior_loss = 0.0
@@ -395,9 +474,9 @@ class Solver(object):
 
         # (2) find the threshold
         attens_energy = []
-        for i, (input_data, labels) in enumerate(self.thre_loader):
+        for i, (input_data, labels, classes) in enumerate(self.thre_loader):
             input = input_data.float().to(self.device)
-            output, series, prior, _ = self.model(input)
+            cls_output, output, series, prior, _ = self.model(input)
 
             loss = torch.mean(criterion(input, output), dim=-1)
 
@@ -469,9 +548,13 @@ class Solver(object):
         # (3) evaluation on the test set
         test_labels = []
         attens_energy = []
-        for i, (input_data, labels) in enumerate(self.thre_loader):
+        cls_preds = []
+        cls_golds = []
+        cls_num_cnt = 0
+        cls_correct_cnt = 0
+        for i, (input_data, labels, classes) in enumerate(self.test_loader):
             input = input_data.float().to(self.device)
-            output, series, prior, _ = self.model(input)
+            cls_output, output, series, prior, _ = self.model(input)
 
             loss = torch.mean(criterion(input, output), dim=-1)
 
@@ -530,15 +613,35 @@ class Solver(object):
                     )
             metric = torch.softmax((-series_loss - prior_loss), dim=-1)
 
+            # Compute classification accuracy
+            cls_prob = self.softmax(cls_output)
+            _, cls_predicted = torch.max(cls_prob.data, 2)
+            _, cls_gold = torch.max(classes, 2)
+
+            # Filter only anomaly regions
+            # predicted_for_anomaly_regions = predicted[labels == 1]
+            # gold_for_anomaly_regions = gold[labels == 1]
+
+            # cls_correct_cnt += (
+            #     (predicted_for_anomaly_regions == gold_for_anomaly_regions.cuda())
+            #     .sum()
+            #     .item()
+            # )
+            # cls_num_cnt += predicted_for_anomaly_regions.size(0)
+
             cri = metric * loss
             cri = cri.detach().cpu().numpy()
             attens_energy.append(cri)
             test_labels.append(labels)
+            cls_preds.append(cls_predicted)
+            cls_golds.append(cls_gold)
 
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
         test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
         test_energy = np.array(attens_energy)
         test_labels = np.array(test_labels)
+        cls_preds = np.array(torch.stack(cls_preds).cpu()).reshape(-1)
+        cls_golds = np.array(torch.stack(cls_golds).cpu()).reshape(-1)
 
         pred = (test_energy > thresh).astype(int)
 
@@ -574,17 +677,56 @@ class Solver(object):
         print("pred: ", pred.shape)
         print("gt:   ", gt.shape)
 
-        from sklearn.metrics import precision_recall_fscore_support
-        from sklearn.metrics import accuracy_score
+        # Compute accuracy
+        before_correct_cnt, before_total_cnt = calculate_classification_accuracy(
+            cls_preds, cls_golds, test_labels
+        )
+
+        # Modify the gt labels
+        visited_indices = []
+        for start_idx in range(len(gt)):
+            if start_idx in visited_indices:
+                continue
+            if gt[start_idx] == 1:
+                # Find the range
+                for end_idx in range(start_idx, len(gt)):
+                    if gt[end_idx] == 0:
+                        break
+                # get cls preds
+                cls_pred_sub = cls_preds[start_idx:end_idx]
+                # Find the most frequent class
+                tmp = {}
+                for cls in cls_pred_sub:
+                    if cls not in tmp.keys():
+                        tmp[cls] = 0
+                    tmp[cls] += 1
+                # Sort the dict by value
+                tmp = sorted(tmp.items(), key=lambda x: x[1], reverse=True)
+                most_frequent_cls = tmp[0][0]
+                cls_preds[start_idx:end_idx] = most_frequent_cls
+                visited_indices += list(range(start_idx, end_idx))
+            else:
+                continue
+
+        after_correct_cnt, after_total_cnt = calculate_classification_accuracy(
+            cls_preds, cls_golds, test_labels
+        )
 
         accuracy = accuracy_score(gt, pred)
         precision, recall, f_score, support = precision_recall_fscore_support(
             gt, pred, average="binary"
         )
+
         print(
             "Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F-score : {:0.4f} ".format(
                 accuracy, precision, recall, f_score
             )
+        )
+        print(
+            f"Before acc: {before_correct_cnt / before_total_cnt} ({before_correct_cnt}/{before_total_cnt})"
+        )
+        print(
+            f"After acc: {after_correct_cnt / after_total_cnt} ({after_correct_cnt}/{after_total_cnt})"
         )
 
         return accuracy, precision, recall, f_score

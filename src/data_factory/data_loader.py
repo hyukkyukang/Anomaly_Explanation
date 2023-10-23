@@ -373,18 +373,52 @@ class DBSSegLoader(object):
 
     def __getitem__(self, index) -> Tuple[np.ndarray, np.ndarray]:
         if self.mode == "train":
-            return np.float32(self.train_data[index]), np.float32(
-                self.train_labels[index]
+            return (
+                np.float32(self.train_data[index]),
+                np.float32(self.train_labels[index]),
+                torch.tensor(
+                    torch.nn.functional.one_hot(
+                        torch.tensor(self.train_classes[index], dtype=int),
+                        num_classes=10,
+                    ),
+                    dtype=float,
+                ),
             )
         elif self.mode == "val":
-            return np.float32(self.val_data[index]), np.float32(self.val_labels[index])
+            return (
+                np.float32(self.val_data[index]),
+                np.float32(self.val_labels[index]),
+                torch.tensor(
+                    torch.nn.functional.one_hot(
+                        torch.tensor(self.val_classes[index], dtype=int),
+                        num_classes=10,
+                    ),
+                    dtype=float,
+                ),
+            )
         elif self.mode == "test":
-            return np.float32(self.test_data[index]), np.float32(
-                self.test_labels[index]
+            return (
+                np.float32(self.test_data[index]),
+                np.float32(self.test_labels[index]),
+                torch.tensor(
+                    torch.nn.functional.one_hot(
+                        torch.tensor(self.test_classes[index], dtype=int),
+                        num_classes=10,
+                    ),
+                    dtype=float,
+                ),
             )
         else:
-            return np.float32(self.test_data_threshold[index]), np.float32(
-                self.test_labels_threshold[index]
+            return (
+                np.float32(self.test_data_threshold[index]),
+                np.float32(self.test_labels_threshold[index]),
+                torch.tensor(
+                    torch.nn.functional.one_hot(
+                        torch.tensor(self.test_classes_threshold[index], dtype=int),
+                        num_classes=10,
+                    ),
+                    dtype=float,
+                ),
             )
 
     def _load_pickle(self, path: str) -> List[Union[np.ndarray, int]]:

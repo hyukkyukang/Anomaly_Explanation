@@ -12,12 +12,12 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--anormly_ratio=2",
-                "--num_epochs=10",
-                "--batch_size=256",
+                "--anormly_ratio=4",
+                "--num_epochs=20",
+                "--batch_size=8",
                 "--mode=train",
                 "--dataset=DBS",
-                "--data_path=dataset/processed_dataset",
+                "--data_path=dataset/dbsherlock/processed/tpce_3000",
                 "--input_c=200",
                 "--output_c=200",
                 "--win_size=25",
@@ -32,17 +32,29 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--anormly_ratio=2",
+                "--anormly_ratio=4",
                 "--num_epochs=10",
-                "--batch_size=256",
+                "--batch_size=512",
                 "--mode=test",
                 "--dataset=DBS",
-                "--data_path=dataset/processed_dataset",
+                "--data_path=dataset/dbsherlock/processed/tpce_3000",
                 "--input_c=200",
                 "--output_c=200",
                 "--win_size=25",
                 "--step_size=25",
-                "--pretrained_model=20",
+            ]
+        },
+        {
+            "name": "Python: preprocess",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/data_factory/dbsherlock/convert.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--input=dataset/dbsherlock/tpce_3000.mat",
+                "--out_dir=dataset/dbsherlock/converted/",
+                "--prefix=tpce_3000",
             ]
         }
     ]
