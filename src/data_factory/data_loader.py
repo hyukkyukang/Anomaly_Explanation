@@ -1,7 +1,3 @@
-import collections
-import json
-import math
-import numbers
 import os
 import pickle
 import random
@@ -9,10 +5,9 @@ from typing import *
 
 import numpy as np
 import pandas as pd
-import torch
-from PIL import Image
 from sklearn.preprocessing import StandardScaler
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
+
 from src.data_factory.dbsherlock.utils import anomaly_causes
 
 random.seed(0)
