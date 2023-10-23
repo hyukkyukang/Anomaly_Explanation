@@ -30,9 +30,14 @@ pip install -r requirements.txt
 
 ## Prepare Dataset
 ### Download
-Download SMD, SMAP, PSM, MSL, and DBSherlock dataset.
+Download DBSherlock dataset.
 ```bash
-python scripts/download_datasets.py
+python scripts/dataset/download_datasets.py
+```
+
+Append `--download_all` argument to download all datasets (i.e., SMD, SMAP, PSM, MSL, and DBSherlock).
+```bash
+python scripts/dataset/download_datasets.py --download_all
 ```
 
 ### Preprocess data
@@ -71,18 +76,41 @@ python src/data_factory/dbsherlock/process.py \
 ```
 
 ## Train and Evaluate
-We provide the experiment scripts under the folder `./scripts`. You can reproduce the experiment results as follows:
+We provide the experiment scripts under the folder `./scripts`. You can reproduce the experiment results with the below script:
 ```bash
-bash ./scripts/DBS.sh
+bash ./scripts/experiment/DBS.sh
 ```
+or you can run the below commands to train and evaluate the model step by step.
+
 ### Training
 ```bash
-python ...
+python main.py \
+    --anormly_ratio 2 \
+    --num_epochs 10  \
+    --batch_size 256  \
+    --input_c 200 \
+    --output_c 200 \
+    --win_size 25 \
+    --step_size 25 \
+    --dataset DBS \
+    --data_path dataset/processed_dataset \
+    --mode train
 ```
 
 ### Evaluating
 ```bash
-python ...
+python main.py \
+    --anormly_ratio 2 \
+    --num_epochs 10 \
+    --batch_size 256 \
+    --input_c 200 \
+    --output_c 200 \
+    --win_size 25 \
+    --step_size 25 \
+    --pretrained_model 20 \
+    --dataset DBS \
+    --data_path dataset/processed_dataset \
+    --mode test 
 ```
 
 ### Testing

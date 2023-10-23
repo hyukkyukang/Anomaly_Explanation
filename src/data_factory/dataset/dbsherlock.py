@@ -1,0 +1,195 @@
+import logging
+import os
+from typing import *
+
+import hkkang_utils.data as data_utils
+import hkkang_utils.file as file_utils
+import hkkang_utils.list as list_utils
+import numpy as np
+import torch
+
+from data_factory.data import anomaly_causes
+from src.data_factory.data import AnomalyData, AnomalyDataset
+
+SKIP_CAUSES = ["Poor Physical Design"]
+
+logger = logging.getLogger("DBSherlockDataset")
+
+
+@data_utils.dataclass
+class TimeSegment:
+    start_time: int
+    end_time: int
+    value: np.ndarray  # dimension: (time, attribute)
+    is_anomaly: List[bool]
+    is_overlap: List[bool]
+    anomaly_cause: List[int]
+
+
+class DBSherlockDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data_path: str,
+        win_size: int,
+        step: int,
+        mode="train",
+        skip_causes: Optional[List[str]] = SKIP_CAUSES,
+    ):
+        self.data_path = data_path
+        self.mode = mode
+        self.step = step
+        self.win_size = win_size
+        self.data_split_ratio = (0.8, 0.1, 0.1)
+        self.time_segments: List[TimeSegment] = []
+        self.skip_causes = skip_causes if skip_causes else []
+        self.__post__init__()
+
+    def __post__init__(self) -> None:
+        # Load dataset
+        dataset: AnomalyDataset = self.load_dataset(self.data_path)
+
+        # Split dataset
+        train_data_list, val_data_list, test_data_list = self.split_dataset(dataset)
+
+        if self.mode == "train":
+            data_list = train_data_list
+        elif self.mode == "val":
+            data_list = val_data_list
+        elif self.mode == "test":
+            data_list = test_data_list
+        else:
+            data_list = test_data_list
+
+        # Create time segments
+        logger.info(f"Creating time segments for {self.mode} mode")
+        self.time_segments = list_utils.do_flatten_list(
+            [self.create_time_segments(d) for d in data_list]
+        )
+
+        # Scale values
+        logger.info(f"Scaling values for {self.mode} mode")
+        self.scale_values()
+        logger.info(
+            f"{self.mode} dataset is ready! ({len(self)} time segments from {len(data_list)} anomaly data)\n"
+        )
+
+    def __len__(self) -> int:
+        return len(self.time_segments)
+
+    def __getitem__(
+        self, index: int
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        # Get data
+        value: np.ndarray = self.time_segments[index].value
+        label: List[bool] = self.time_segments[index].is_anomaly
+        cause: List[int] = self.time_segments[index].anomaly_cause
+        is_overlap: List[bool] = self.time_segments[index].is_overlap
+
+        # Return
+        return value, np.float32(label), np.float32(cause), np.float32(is_overlap)
+
+    def load_dataset(self, path: str) -> AnomalyDataset:
+        assert path.endswith(".json")
+        cache_path = path.replace(".json", ".pkl")
+        # Load from cache if exists
+        if os.path.isfile(cache_path):
+            logger.info(f"Loading dataset from {cache_path}")
+            return file_utils.read_pickle_file(cache_path)
+        # Load from json file
+        logger.info(f"Loading dataset from {path}")
+        dataset_dic: Dict = file_utils.read_json_file(path)
+        dataset = AnomalyDataset.from_dict(data=dataset_dic)
+        # Save to cache
+        logger.info(f"Saving dataset to {cache_path}")
+        file_utils.write_pickle_file(dataset, cache_path)
+        return dataset
+
+    def split_dataset(
+        self, dataset: AnomalyDataset
+    ) -> Tuple[List[AnomalyData], List[AnomalyData], List[AnomalyData]]:
+        train_data = []
+        val_data = []
+        test_data = []
+        for cause in dataset.causes:
+            if cause in self.skip_causes:
+                continue
+            data_of_cause = dataset.get_data_of_cause(cause)
+            train_end_idx = int(len(data_of_cause) * self.data_split_ratio[0])
+            val_end_idx = int(len(data_of_cause) * sum(self.data_split_ratio[0:2]))
+            train_data.extend(data_of_cause[:train_end_idx])
+            val_data.extend(data_of_cause[train_end_idx:val_end_idx])
+            test_data.extend(data_of_cause[val_end_idx:])
+
+        return train_data, val_data, test_data
+
+    def create_time_segments(self, data: AnomalyData) -> List[TimeSegment]:
+        segments: List[TimeSegment] = []
+        total_time = len(data.values)
+        assert (
+            total_time > self.win_size
+        ), f"total_time: {total_time}, win_size: {self.win_size}"
+
+        # Create segments from the given anomaly data
+        for start_time in range(0, total_time, self.win_size):
+            end_time = min(start_time + self.win_size, total_time)
+
+            # Check if the data is enough for the window size.
+            # If not, use overlapping data from the previous segment.
+            is_overlap = [False] * self.win_size
+            if end_time - start_time < self.win_size:
+                # Use overlapping data
+                overlap_size = self.win_size - (end_time - start_time)
+                is_overlap[:overlap_size] = [True] * overlap_size
+                start_time = end_time - self.win_size
+
+            # Create a segment
+            value = data.values[start_time:end_time]
+            is_anomaly = [
+                idx in data.valid_abnormal_regions
+                for idx in range(start_time, end_time)
+            ]
+            cause = anomaly_causes.index(data.cause)
+            anomaly_cause = [
+                cause if is_anomaly[idx] else None for idx in range(self.win_size)
+            ]
+            segments.append(
+                TimeSegment(
+                    start_time=start_time,
+                    end_time=end_time,
+                    value=np.array(value),
+                    is_anomaly=is_anomaly,
+                    is_overlap=is_overlap,
+                    anomaly_cause=anomaly_cause,
+                )
+            )
+
+        return segments
+
+    def scale_values(
+        self, means: Optional[List[float]] = None
+    ) -> Union[List[float], None]:
+        # Check attribute size of all time segments are the same
+        assert len(set([s.value.shape[1] for s in self.time_segments])) == 1
+
+        # Calculate means for each attribute
+        if means is None:
+            means = [0] * self.time_segments[0].value.shape[1]
+            cnts = [0] * self.time_segments[0].value.shape[1]
+            # Sum and count all values
+            for time_segment in self.time_segments:
+                for att_idx in range(time_segment.value.shape[1]):
+                    means[att_idx] += sum(time_segment.value[:, att_idx])
+                    cnts[att_idx] += len(time_segment.value[:, att_idx])
+            # Division
+            for idx in range(len(means)):
+                means[idx] /= cnts[idx]
+
+        # Check the size of means is valid
+        assert (
+            len(means) == self.time_segments[0].value.shape[1]
+        ), f"Invalid shape for means: {len(means)} vs {self.time_segments[0].value.shape[1]}"
+
+        # Scale all values using the means
+        for time_segment in self.time_segments:
+            for att_idx in range(time_segment.value.shape[1]):
+                time_segment.value[:, att_idx] -= means[att_idx]

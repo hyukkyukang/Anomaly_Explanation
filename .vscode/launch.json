@@ -17,11 +17,9 @@
                 "--batch_size=8",
                 "--mode=train",
                 "--dataset=DBS",
-                "--data_path=dataset/dbsherlock/processed/tpce_3000",
-                "--input_c=200",
-                "--output_c=200",
                 "--win_size=25",
                 "--step_size=25",
+                "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
             ]
         },
         {
@@ -37,7 +35,7 @@
                 "--batch_size=512",
                 "--mode=test",
                 "--dataset=DBS",
-                "--data_path=dataset/dbsherlock/processed/tpce_3000",
+                "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
                 "--input_c=200",
                 "--output_c=200",
                 "--win_size=25",

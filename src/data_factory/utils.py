@@ -5,22 +5,9 @@ import hkkang_utils.list as list_utils
 import numpy as np
 import tqdm
 
-from src.data_factory.dbsherlock.data import AnomalyData, AnomalyDataset
+from data_factory.data import AnomalyData, AnomalyDataset
 
 logger = logging.getLogger("DBSherlockDataConverter")
-
-anomaly_causes = [
-    "Poorly Written Query",
-    "Poor Physical Design",
-    "Workload Spike",
-    "I/O Saturation",
-    "DB Backup",
-    "Table Restore",
-    "CPU Saturation",
-    "Flush Log/Table",
-    "Network Congestion",
-    "Lock Contention",
-]
 
 
 def to_zero_based_index(indices: List[int]) -> List[int]:
@@ -61,7 +48,7 @@ def np_dataset_to_test_cases(
     return test_cases
 
 
-def process_dataset(
+def create_anomaly_dataset(
     causes_as_np: np.ndarray,
     dataset_as_np: np.ndarray,
     normal_regions: np.ndarray,

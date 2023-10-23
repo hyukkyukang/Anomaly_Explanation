@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
-from data_factory.data_loader import get_loader_segment
+from data_factory.dataloader import get_dataloader
 from model.AnomalyTransformer import AnomalyTransformer
 from utils.utils import *
 
@@ -62,9 +62,7 @@ def adjust_learning_rate(optimizer, epoch, lr_):
 
 
 class EarlyStopping:
-    def __init__(
-        self, patience=7, verbose=False, dataset_name="", delta=0, cause="all"
-    ):
+    def __init__(self, patience=7, verbose=False, dataset_name="", delta=0):
         self.patience = patience
         self.verbose = verbose
         self.counter = 0
@@ -77,7 +75,6 @@ class EarlyStopping:
         self.val_loss2_min = np.Inf
         self.delta = delta
         self.dataset = dataset_name
-        self.cause = cause
 
     def __call__(self, val_loss, val_loss2, val_loss3, accuracy, model, path):
         score = -val_loss
@@ -118,9 +115,7 @@ class EarlyStopping:
             model.state_dict(),
             os.path.join(
                 path,
-                str(self.dataset)
-                + f"_{self.cause}".replace(" ", "_").replace("/", "")
-                + "_checkpoint.pth",
+                str(self.dataset) + "_checkpoint.pth",
             ),
         )
         self.val_loss_min = val_loss
@@ -134,41 +129,37 @@ class Solver(object):
     def __init__(self, config):
         self.__dict__.update(Solver.DEFAULTS, **config)
 
-        self.train_loader = get_loader_segment(
-            self.data_path,
+        self.train_loader = get_dataloader(
+            data_path=self.data_path,
             batch_size=self.batch_size,
             win_size=self.win_size,
             step=self.step_size,
             mode="train",
             dataset=self.dataset,
-            cause=config["cause"],
         )
-        self.vali_loader = get_loader_segment(
-            self.data_path,
+        self.vali_loader = get_dataloader(
+            data_path=self.data_path,
             batch_size=self.batch_size,
             win_size=self.win_size,
             step=self.step_size,
             mode="val",
             dataset=self.dataset,
-            cause=config["cause"],
         )
-        self.test_loader = get_loader_segment(
-            self.data_path,
+        self.test_loader = get_dataloader(
+            data_path=self.data_path,
             batch_size=self.batch_size,
             win_size=self.win_size,
             step=self.step_size,
             mode="test",
             dataset=self.dataset,
-            cause=config["cause"],
         )
-        self.thre_loader = get_loader_segment(
-            self.data_path,
+        self.thre_loader = get_dataloader(
+            data_path=self.data_path,
             batch_size=self.batch_size,
             win_size=self.win_size,
             step=self.step_size,
             mode="thre",
             dataset=self.dataset,
-            cause=config["cause"],
         )
         self.build_model()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -272,7 +263,7 @@ class Solver(object):
         if not os.path.exists(path):
             os.makedirs(path)
         early_stopping = EarlyStopping(
-            patience=20, verbose=True, dataset_name=self.dataset, cause=self.cause
+            patience=20, verbose=True, dataset_name=self.dataset
         )
         train_steps = len(self.train_loader)
 
@@ -282,7 +273,9 @@ class Solver(object):
 
             epoch_time = time.time()
             self.model.train()
-            for i, (input_data, labels, classes) in enumerate(self.train_loader):
+            for i, (input_data, labels, classes, is_overlaps) in enumerate(
+                self.train_loader
+            ):
                 self.optimizer.zero_grad()
                 iter_count += 1
                 input = input_data.float().to(self.device)
@@ -393,9 +386,7 @@ class Solver(object):
             torch.load(
                 os.path.join(
                     str(self.model_save_path),
-                    str(self.dataset)
-                    + f"_{self.cause}".replace(" ", "_").replace("/", "")
-                    + "_checkpoint.pth",
+                    str(self.dataset) + "_checkpoint.pth",
                 )
             )
         )
