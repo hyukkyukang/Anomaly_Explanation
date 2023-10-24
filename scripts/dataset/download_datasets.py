@@ -33,36 +33,37 @@ def move_files_to_parent_dir(parent_dir_path: str, child_dir_name: str) -> None:
     os.rmdir(child_dir_path)
 
 
-def main(output_dir: str) -> None:
+def main(output_dir: str, download_all: bool = False) -> None:
     """Download all dataset"""
     # Create directory
     os.makedirs(output_dir, exist_ok=True)
 
     # Start downloading
-    for name, url in datasets.items():
-        # Download dataset
-        download_path = os.path.join(output_dir, f"{name}.zip")
-        print(f"Downloading {name} dataset...")
-        gdown.download(url, download_path, quiet=False, fuzzy=True)
+    if download_all:
+        for name, url in datasets.items():
+            # Download dataset
+            download_path = os.path.join(output_dir, f"{name}.zip")
+            print(f"Downloading {name} dataset...")
+            gdown.download(url, download_path, quiet=False, fuzzy=True)
 
-        # Unzip dataset
-        unzip_path = download_path[:-4]
-        print("Extracting...")
-        with zipfile.ZipFile(download_path, "r") as zip_ref:
-            zip_ref.extractall(unzip_path)
+            # Unzip dataset
+            unzip_path = download_path[:-4]
+            print("Extracting...")
+            with zipfile.ZipFile(download_path, "r") as zip_ref:
+                zip_ref.extractall(unzip_path)
 
-        # Move files to parent directory
-        child_dir = os.path.join(output_dir, name)
-        if os.path.exists(child_dir):
-            move_files_to_parent_dir(child_dir, name)
-            macosx_dir = os.path.join(output_dir, name, "__MACOSX")
-            if os.path.exists(macosx_dir):
-                print("Clean __MACOSX directory...")
-                shutil.rmtree(macosx_dir)
+            # Move files to parent directory
+            child_dir = os.path.join(output_dir, name)
+            if os.path.exists(child_dir):
+                move_files_to_parent_dir(child_dir, name)
+                macosx_dir = os.path.join(output_dir, name, "__MACOSX")
+                if os.path.exists(macosx_dir):
+                    print("Clean __MACOSX directory...")
+                    shutil.rmtree(macosx_dir)
 
-        # Clean up
-        print("Removing zip file...")
-        os.remove(download_path)
+            # Clean up
+            print("Removing zip file...")
+            os.remove(download_path)
 
     # Download DBSherlock Dataset
     print("Downloading DBSherlock dataset...")
@@ -84,10 +85,19 @@ def parse_args():
         default="/root/Anomaly_Explanation/dataset/",
         help="path to save the dataset",
     )
+    parser.add_argument(
+        "--download_all",
+        action="store_true",
+        help="Whether to download all dataset (i.e., SMD, SMAP, PSM, MSL). If not, only download DBSherlock dataset.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     output_dir = args.output_dir
-    main(output_dir=output_dir)
+    download_all = args.download_all
+
+    main(output_dir=output_dir, download_all=download_all)
+
+    print("Done!")

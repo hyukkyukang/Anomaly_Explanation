@@ -6,13 +6,15 @@ from typing import *
 import hkkang_utils.file as file_utils
 import scipy
 
-from src.data_factory.dbsherlock.data import AnomalyDataset
-from src.data_factory.dbsherlock.utils import process_dataset
+from data_factory.data import AnomalyDataset
+from data_factory.utils import create_anomaly_dataset
 
 logger = logging.getLogger("DataConverter")
 
 
 def main(input_path: str, output_dir: str, prefix: str) -> None:
+    """Convert .mat file to .json file"""
+
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
 
@@ -21,7 +23,7 @@ def main(input_path: str, output_dir: str, prefix: str) -> None:
 
     # Create anomaly dataset
     logger.info(f"Create anomaly dataset from {input_path}")
-    test_dataset: AnomalyDataset = process_dataset(
+    test_dataset: AnomalyDataset = create_anomaly_dataset(
         causes_as_np=original_data["causes"],
         dataset_as_np=original_data["test_datasets"],
         normal_regions=original_data["normal_regions"],
@@ -36,7 +38,7 @@ def main(input_path: str, output_dir: str, prefix: str) -> None:
     # Create compound anomaly dataset if exists
     if "compound_datasets" in original_data:
         logger.info(f"Create compound anomaly dataset from {input_path}")
-        compound_dataset: AnomalyDataset = process_dataset(
+        compound_dataset: AnomalyDataset = create_anomaly_dataset(
             causes_as_np=original_data["compound_causes"],
             dataset_as_np=original_data["compound_datasets"],
             normal_regions=original_data["normal_regions_compound"],

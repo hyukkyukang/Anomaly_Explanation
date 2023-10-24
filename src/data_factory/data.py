@@ -4,6 +4,20 @@ from typing import *
 import hkkang_utils.data as data_utils
 import numpy as np
 
+ANOMALY_CAUSES = [
+    "No Anomaly",
+    "Poorly Written Query",
+    "Poor Physical Design",
+    "Workload Spike",
+    "I/O Saturation",
+    "DB Backup",
+    "Table Restore",
+    "CPU Saturation",
+    "Flush Log/Table",
+    "Network Congestion",
+    "Lock Contention",
+]
+
 
 @data_utils.dataclass
 class AnomalyData:

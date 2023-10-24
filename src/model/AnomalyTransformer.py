@@ -3,11 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .attn import AnomalyAttention, AttentionLayer, seed_num
-from .embed import DataEmbedding, TokenEmbedding
-seed_num=seed_num
+from .embed import DataEmbedding
+from src.data_factory.data import ANOMALY_CAUSES
+
+seed_num = seed_num
 torch.manual_seed(seed_num)
 torch.cuda.manual_seed(seed_num)
 torch.cuda.manual_seed_all(seed_num)
+
+
 class EncoderLayer(nn.Module):
     def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu"):
         super(EncoderLayer, self).__init__()
@@ -21,10 +25,7 @@ class EncoderLayer(nn.Module):
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None):
-        new_x, attn, mask, sigma = self.attention(
-            x, x, x,
-            attn_mask=attn_mask
-        )
+        new_x, attn, mask, sigma = self.attention(x, x, x, attn_mask=attn_mask)
         x = x + self.dropout(new_x)
         y = x = self.norm1(x)
         y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
@@ -57,10 +58,23 @@ class Encoder(nn.Module):
 
 
 class AnomalyTransformer(nn.Module):
-    def __init__(self, win_size, enc_in, c_out, d_model=512, n_heads=8, e_layers=3, d_ff=512,
-                 dropout=0.0, activation='gelu', output_attention=True):
+    def __init__(
+        self,
+        win_size,
+        enc_in,
+        c_out,
+        d_model=512,
+        n_heads=8,
+        e_layers=3,
+        d_ff=512,
+        n_classes=len(ANOMALY_CAUSES),
+        dropout=0.0,
+        activation="gelu",
+        output_attention=True,
+    ):
         super(AnomalyTransformer, self).__init__()
         self.output_attention = output_attention
+        self.n_classes = n_classes
 
         # Encoding
         self.embedding = DataEmbedding(enc_in, d_model, dropout)
@@ -70,25 +84,35 @@ class AnomalyTransformer(nn.Module):
             [
                 EncoderLayer(
                     AttentionLayer(
-                        AnomalyAttention(win_size, False, attention_dropout=dropout, output_attention=output_attention),
-                        d_model, n_heads),
+                        AnomalyAttention(
+                            win_size,
+                            False,
+                            attention_dropout=dropout,
+                            output_attention=output_attention,
+                        ),
+                        d_model,
+                        n_heads,
+                    ),
                     d_model,
                     d_ff,
                     dropout=dropout,
-                    activation=activation
-                ) for l in range(e_layers)
+                    activation=activation,
+                )
+                for l in range(e_layers)
             ],
-            norm_layer=torch.nn.LayerNorm(d_model)
+            norm_layer=torch.nn.LayerNorm(d_model),
         )
 
         self.projection = nn.Linear(d_model, c_out, bias=True)
+        self.class_projection = nn.Linear(d_model, n_classes, bias=True)
 
     def forward(self, x):
         enc_out = self.embedding(x)
-        enc_out, series, prior, sigmas = self.encoder(enc_out)
-        enc_out = self.projection(enc_out)
+        enc_out_, series, prior, sigmas = self.encoder(enc_out)
+        enc_out = self.projection(enc_out_)
+        cls_out = self.class_projection(enc_out_)
 
         if self.output_attention:
-            return enc_out, series, prior, sigmas
+            return cls_out, enc_out, series, prior, sigmas
         else:
-            return enc_out  # [B, L, D]
+            return cls_out, enc_out  # [B, L, D]
