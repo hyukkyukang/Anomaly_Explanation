@@ -6,7 +6,8 @@ import warnings
 import numpy as np
 from sklearn.covariance import MinCovDet
 from sklearn.decomposition import PCA
-
+from sklearn.preprocessing import StandardScaler
+from src.data_factory.dataset.dbsherlock import DBSherlockDataset
 warnings.filterwarnings("ignore")
 
 
@@ -53,48 +54,36 @@ def feature_extraction_with_pca(data, top_n=1):
 def normalize(dataset):
     return (dataset - np.min(dataset)) / (np.max(dataset) - np.min(dataset))
 
-
-def load_dataset(input_path):
-    dataset = {}
+def load_dataset(data_path):
+    dataset = DBSherlockDataset(data_path, 25, 25)
+    dataset_dict = {}
+    scaler = StandardScaler()
     for partition in ["train", "val", "test"]:
-        filename = partition
-        data_path = input_path + "/" + filename
-        dataset[partition] = normalize(preprocess_data(load_pickle(data_path + ".pkl")))
-        filename = partition + "_label"
-        data_path = input_path + "/" + filename
-        dataset[partition + "_label"] = preprocess_data(load_pickle(data_path + ".pkl"))
-    return dataset
-
-
-def list_subdirectories(path):
-    return [
-        os.path.join(path, d)
-        for d in os.listdir(path)
-        if os.path.isdir(os.path.join(path, d))
-    ]
-
-
-def load_pickle(path: str):
-    with open(path, "rb") as f:
-        data = pickle.load(f)
-    return data
-
-
-def preprocess_data(data):
-    all_data = []
-    for datum in data:
-        all_data.extend(datum)
-    return all_data
-
+        length_list = []
+        all_data = []
+        label = []
+        if partition == "train":
+            dataset_loader = dataset.train_data_list
+        elif partition == "val":
+            dataset_loader = dataset.val_data_list
+        else:
+            dataset_loader = dataset.test_data_list
+        for i in range(len(dataset_loader)):
+            data = dataset_loader[i]
+            all_data.extend(data.valid_values)
+            length_list.append(len(data.valid_values))
+            label.extend([1 if id in data.abnormal_regions else 0 for id, value in enumerate(data.valid_values)])
+        dataset_dict[partition] = np.array(normalize(all_data))
+        dataset_dict[partition + '_length'] = np.array(length_list)
+        dataset_dict[partition + '_label'] = np.array(label)
+    return dataset_dict
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--input_path",
-        default="/home/shpark/Anomaly_Explanation/dataset/dbsherlock/processed/tpce_3000",
+        "--data_path", type=str, default="dataset/dbsherlock/converted/tpcc_500w_test.json"
     )
     parser.add_argument("--dim", default=15)
-    parser.add_argument("--mode", default="whole", choices=["whole", "cause"])
     parser.add_argument("--find_best", default=True)
     parser.add_argument("--feature_extraction", default=True)
     return parser.parse_args()
@@ -103,72 +92,58 @@ def parse_args():
 if __name__ == "__main__":
     np.random.seed(300)
     args = parse_args()
-    mode = args.mode
     dim = args.dim
-    input_path = args.input_path
+    data_path = args.data_path
     feature_extraction = args.feature_extraction
+    dataset_dict = load_dataset(data_path)
+    pca = PCA(n_components=dim)
+    train_data_pca = pca.fit_transform(dataset_dict["train"])
+    
+    
+    # if feature_extraction:
+    #     top_idx = feature_extraction_with_pca(dataset_dict["test"], dim)
+    #     principal_components = dataset_dict["test"][:, top_idx]
+    # else:
+    #     principal_components = dataset_dict["test"]
 
-    if mode == "whole":
-        cause_path_list = [input_path]
-    else:
-        cause_path_list = list_subdirectories(input_path)
+    try:
+        mcd_train = MinCovDet(support_fraction=1).fit(train_data_pca)
+    except:
+        pass
 
-    for cause_path in cause_path_list:
-        print(f"Results of {os.path.basename(cause_path)}")
-        dataset = load_dataset(cause_path)
-
-        if feature_extraction:
-            top_idx = feature_extraction_with_pca(dataset["test"], dim)
-            principal_components = dataset["test"][:, top_idx]
-        else:
-            principal_components = dataset["test"]
-
-        try:
-            mcd = MinCovDet(support_fraction=1).fit(principal_components)
-        except:
-            continue
-
-        if args.find_best:
-            principal_components_train_val = np.concatenate(
-                (dataset["train"], dataset["val"]), axis=0
-            )[:, top_idx]
-            mcd_train_val = MinCovDet(support_fraction=1).fit(
-                principal_components_train_val
-            )
-            distances = mcd.mahalanobis(
-                principal_components_train_val - mcd_train_val.location_
-            ) ** (0.5)
-            distances_with_idx = list(zip(range(0, len(distances)), distances))
-            best_f1 = 0
-            best_percentile = None
-            for percentile in range(101):
-                pctile_cutoff = np.percentile(distances_with_idx, percentile)
-                filtered_distances = (distances.tolist() > pctile_cutoff).astype(int)
-                accuracy, precision, recall, f_score = get_accuracy(
-                    np.concatenate(
-                        (dataset["train_label"], dataset["val_label"]), axis=0
-                    ).tolist(),
-                    filtered_distances.tolist(),
-                )
-                if f_score >= best_f1:
-                    best_f1 = f_score
-                    best_percentile = percentile
-                    best_recall = recall
-                    best_precision = precision
-            percentile = best_percentile
-        else:
-            percentile = 99
-
-        distances = mcd.mahalanobis(principal_components - mcd.location_) ** (0.5)
+    if args.find_best:
+        principal_components_val = pca.transform(dataset_dict["val"])
+        distances = mcd_train.mahalanobis(
+            principal_components_val - mcd_train.location_
+        ) ** (0.5)
         distances_with_idx = list(zip(range(0, len(distances)), distances))
-        pctile_cutoff = np.percentile(distances_with_idx, percentile)
-        filtered_distances = (distances.tolist() > pctile_cutoff).astype(int)
-        accuracy, precision, recall, f_score = get_accuracy(
-            dataset["test_label"], filtered_distances.tolist()
-        )
+        best_f1 = 0
+        best_percentile = None
+        for percentile in range(101):
+            pctile_cutoff = np.percentile(distances_with_idx, percentile)
+            filtered_distances = (distances.tolist() > pctile_cutoff).astype(int)
+            accuracy, precision, recall, f_score = get_accuracy(
+                dataset_dict["val_label"], filtered_distances.tolist()
+            )
+            if f_score >= best_f1:
+                best_f1 = f_score
+                best_percentile = percentile
+                best_recall = recall
+                best_precision = precision
+        percentile = best_percentile
+    else:
+        percentile = 99
+    principal_components_test = pca.transform(dataset_dict["test"])
+    distances = mcd_train.mahalanobis(principal_components_test - mcd_train.location_) ** (0.5)
+    distances_with_idx = list(zip(range(0, len(distances)), distances))
+    pctile_cutoff = np.percentile(distances_with_idx, percentile)
+    filtered_distances = (distances.tolist() > pctile_cutoff).astype(int)
+    accuracy, precision, recall, f_score = get_accuracy(
+        dataset_dict["test_label"], filtered_distances.tolist()
+    )
 
-        print(f"dim: {dim}")
-        print(f"percentile for that: {percentile}")
-        print(f"recall score: {recall}")
-        print(f"precision score: {precision}")
-        print(f"f1 score: {f_score}")
+    print(f"dim: {dim}")
+    print(f"percentile for that: {percentile}")
+    print(f"recall score: {recall}")
+    print(f"precision score: {precision}")
+    print(f"f1 score: {f_score}")

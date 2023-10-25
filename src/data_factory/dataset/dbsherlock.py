@@ -8,7 +8,7 @@ import hkkang_utils.list as list_utils
 import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
-
+import random
 from data_factory.data import ANOMALY_CAUSES
 from src.data_factory.data import AnomalyData, AnomalyDataset
 
@@ -40,7 +40,7 @@ class DBSherlockDataset(torch.utils.data.Dataset):
         self.mode = mode
         self.step = step
         self.win_size = win_size
-        self.data_split_ratio = (0.7, 0.1, 0.2)
+        self.data_split_num = (8, 1, 2)
         self.time_segments: List[TimeSegment] = []
         self.skip_causes = skip_causes if skip_causes else []
         self.__post__init__()
@@ -50,8 +50,12 @@ class DBSherlockDataset(torch.utils.data.Dataset):
         dataset: AnomalyDataset = self.load_dataset(self.data_path)
 
         # Split dataset
-        train_data_list, val_data_list, test_data_list = self.split_dataset(dataset)
+        train_data_list, val_data_list, test_data_list = self.split_dataset(dataset, seed = 120)
 
+        self.train_data_list = train_data_list
+        self.val_data_list = val_data_list
+        self.test_data_list = test_data_list
+        
         if self.mode == "train":
             data_list = train_data_list
         elif self.mode == "val":
@@ -110,20 +114,32 @@ class DBSherlockDataset(torch.utils.data.Dataset):
         return dataset
 
     def split_dataset(
-        self, dataset: AnomalyDataset
+        self, dataset: AnomalyDataset, seed: Optional[int] = None
     ) -> Tuple[List[AnomalyData], List[AnomalyData], List[AnomalyData]]:
         train_data = []
         val_data = []
         test_data = []
+        if seed is not None:
+            random.seed(seed)
+        else:
+            random.seed(0)
+        indicies = list(range(11))
+        random.shuffle(indicies)
+        cut1 = self.data_split_num[0]
+        cut2 = cut1 + self.data_split_num[1]
+        train_indicies = indicies[:cut1]
+        val_indicies = indicies[cut1:cut2]
         for cause in dataset.causes:
             if cause in self.skip_causes:
                 continue
             data_of_cause = dataset.get_data_of_cause(cause)
-            train_end_idx = int(len(data_of_cause) * self.data_split_ratio[0])
-            val_end_idx = int(len(data_of_cause) * sum(self.data_split_ratio[0:2]))
-            train_data.extend(data_of_cause[:train_end_idx])
-            val_data.extend(data_of_cause[train_end_idx:val_end_idx])
-            test_data.extend(data_of_cause[val_end_idx:])
+            for id in range(11):
+                if id in train_indicies:
+                    train_data.append(data_of_cause[id])
+                elif id in val_indicies:
+                    val_data.append(data_of_cause[id])
+                else:
+                    test_data.append(data_of_cause[id])
 
         return train_data, val_data, test_data
 

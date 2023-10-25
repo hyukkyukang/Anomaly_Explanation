@@ -4,6 +4,11 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    
+    
+
+
+
         {
             "name": "Python: Train DBSherlock",
             "type": "python",
@@ -13,8 +18,8 @@
             "justMyCode": true,
             "args": [
                 "--anormly_ratio=4",
-                "--num_epochs=100",
-                "--batch_size=512",
+                "--num_epochs=10",
+                "--batch_size=1024",
                 "--mode=train",
                 "--dataset=DBS",
                 "--win_size=25",
@@ -31,7 +36,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--anormly_ratio=4",
+                "--anormly_ratio=1.0",
                 "--num_epochs=100",
                 "--batch_size=512",
                 "--mode=test",

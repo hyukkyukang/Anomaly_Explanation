@@ -13,6 +13,10 @@ from model.AnomalyTransformer import AnomalyTransformer
 from src.data_factory.data import ANOMALY_CAUSES
 from utils.utils import *
 
+from scipy.spatial import distance
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+np.random.seed(2000)
 logger = logging.getLogger("Solver")
 
 
@@ -135,7 +139,7 @@ class Solver(object):
             mode="train",
             dataset=self.dataset,
         )
-        self.vali_loader = get_dataloader(
+        self.val_loader = get_dataloader(
             data_path=self.data_path,
             batch_size=self.batch_size,
             win_size=self.win_size,
@@ -166,7 +170,8 @@ class Solver(object):
         self.softmax = nn.Softmax(dim=2)
         self.temperature = 50
         self.find_best = config["find_best"]
-
+        self.add_stats = config["add_stats"]
+        self.loaded_dataset = self.load_dataset()
     @property
     def model_save_path(self) -> str:
         return os.path.join(self.model_dir_path, f"{self.dataset}_checkpoint.pth")
@@ -301,19 +306,24 @@ class Solver(object):
 
         # Find stats on train and validation set
         train_energy, train_labels = self.get_attention_energy(self.train_loader)
-        val_energy, val_labels = self.get_attention_energy(self.vali_loader)
-
+        val_energy, val_labels = self.get_attention_energy(self.val_loader)
+        val_overlapping_flags = []
+        for i, (input_data, labels, classes, is_overlaps) in enumerate(
+            self.val_loader
+        ):
+            val_overlapping_flags.append(is_overlaps)
+        val_overlapping_flags = np.concatenate(val_overlapping_flags, axis=0).reshape(-1)
+        val_overlapping_flags = np.array(val_overlapping_flags)
         # Find the threshold
-        combined_energy = np.concatenate([train_energy, val_energy], axis=0)
-        combined_labels = np.concatenate([train_labels, val_labels], axis=0)
+        # combined_energy = np.concatenate([train_energy, val_energy], axis=0)
+        # combined_labels = np.concatenate([train_labels, val_labels], axis=0)
 
         if self.find_best:
-            thresh = self.find_best_threshold(combined_energy, combined_labels)
+            thresh, lamda, dim = self.find_best_threshold(val_energy, val_labels, val_overlapping_flags)
         else:
-            thresh = np.percentile(combined_energy, 100 - self.anormly_ratio)
-
+            lamda = None
+            thresh = np.percentile(val_energy, 100 - self.anormly_ratio)
         logger.info(f"Threshold : {thresh}")
-
         # Inference on the test set
         criterion = nn.MSELoss(reduction="none")
         test_labels = []
@@ -354,7 +364,16 @@ class Solver(object):
         overlapping_flags = np.array(overlapping_flags)
         cls_preds = np.array(torch.stack(cls_preds).cpu()).reshape(-1)
         cls_golds = np.array(torch.stack(cls_golds).cpu()).reshape(-1)
-
+        if lamda is not None:
+            if lamda==0.0:
+                test_energy = test_energy
+            else:
+                if dim is not None:
+                    stats = self.get_distances('test', 'pca', dim)
+                else:
+                    stats = self.get_distances('test')
+                test_energy = test_energy + lamda*stats
+        # thresh = np.percentile(test_energy, 100 - anomaly_ratio)
         # Evaluate
         accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
             test_energy,
@@ -586,25 +605,49 @@ class Solver(object):
         return accuracy, precision, recall, f_score
 
     def find_best_threshold(
-        self, combined_energy, combined_labels, ar_range=np.arange(0, 80, 0.1)
+        self, val_energy, val_labels, overlapping_flags, ar_range=np.arange(1.0, 5.0, 0.1), lamda_range=np.arange(0.01, 0.05, 0.01), dim_range=np.arange(1, 10, 1)
     ) -> float:
         best_f_score = 0
         best_thresh = None
         best_ar = None
+        best_lamda = None
+        best_dim = None
+        option='pca'
         logger.info("Finding best threshold...")
-        for anomaly_ratio in ar_range:
-            logger.info(f"Anomaly Ratio: {anomaly_ratio}")
-            thresh = np.percentile(combined_energy, 100 - anomaly_ratio)
-            accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
-                combined_energy, combined_labels, thresh
-            )
-            if f_score > best_f_score:
-                best_f_score = f_score
-                best_thresh = thresh
-                best_ar = anomaly_ratio
+        if self.add_stats:
+            for dim in dim_range:
+                distances = self.get_distances('val',option,dim)
+                for lamda in lamda_range:
+                    val_energy_with_distances = val_energy + lamda * distances
+                    for anomaly_ratio in ar_range:
+                        logger.info(f"Anomaly Ratio: {anomaly_ratio}")
+                        thresh = np.percentile(val_energy_with_distances, 100 - anomaly_ratio)
+                        accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
+                            val_energy_with_distances, val_labels, thresh, is_overlapping=overlapping_flags,
+                        )
+                        if f_score > best_f_score:
+                            best_f_score = f_score
+                            best_thresh = thresh
+                            best_ar = anomaly_ratio
+                            best_lamda = lamda
+                            best_dim = dim
+            logger.info(f"Best lamda: {best_lamda}\n")
+            logger.info(f"Best dim: {best_dim}\n")
+        else:
+            for anomaly_ratio in ar_range:
+                logger.info(f"Anomaly Ratio: {anomaly_ratio}")
+                thresh = np.percentile(val_energy, 100 - anomaly_ratio)
+                accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
+                    val_energy, val_labels, thresh, is_overlapping=overlapping_flags,
+                )
+                if f_score > best_f_score:
+                    best_f_score = f_score
+                    best_thresh = thresh
+                    best_ar = anomaly_ratio
+
         logger.info(f"Best F1 Score: {best_f_score}")
         logger.info(f"Best Anomaly Ratio: {best_ar}\n")
-        return best_thresh
+        return best_thresh, best_lamda, best_dim
 
     def get_attention_energy(
         self, dataloader: DataLoader
@@ -694,3 +737,99 @@ class Solver(object):
                 continue
 
         return classification_preds
+
+    def get_distances(self, mode, option='pca', dim=1):
+        scaler = StandardScaler()
+        train_data = np.array(scaler.fit_transform(self.loaded_dataset['train']))
+        train_label = np.array(self.loaded_dataset['train_label'])
+        train_data_normal = train_data[np.where(train_label == 0)[0]]
+        train_mean = np.mean(train_data_normal, axis=0)
+        
+        pca = None
+        if option == 'regularize':
+            regularization_term = 1e-5
+            train_covariance = np.cov(train_data_normal, rowvar=False)
+            train_cov_matrix_regularized = train_covariance + regularization_term * np.eye(train_data.shape[1])
+            train_cov_inv = np.linalg.inv(train_cov_matrix_regularized)
+        elif option == 'pca':
+            n_components=dim
+            pca = PCA(n_components=n_components)
+            train_data_normal = pca.fit_transform(train_data_normal).reshape(-1, n_components) # Ensure 2D shape
+            train_mean = np.mean(train_data_normal, axis=0).reshape(-1) # Ensure 1D shape
+            train_cov_inv = np.linalg.inv(np.cov(train_data_normal, rowvar=False).reshape(-1, n_components))
+        else:
+            raise ValueError("Option should be either 'regularize' or 'pca'.")
+
+        if mode == 'val':
+            data = np.array(scaler.transform(self.loaded_dataset['val']))
+        else:
+            data = np.array(scaler.transform(self.loaded_dataset['test']))
+
+        # If PCA option is selected, apply the same transformation to the data
+        if pca:
+            data = pca.transform(data)
+
+        distances = self.distance(data, train_mean, train_cov_inv)
+        if mode == 'val':
+            length_list = self.loaded_dataset['val_length']
+        else:
+            length_list = self.loaded_dataset['test_length']
+            
+        distances = self.split_distances(distances, length_list)
+        distances = self.repreprocess_data(distances, self.step_size)
+        distances = np.concatenate(distances, axis=0).reshape(-1)
+        return distances
+    
+    
+    def load_dataset(self,):
+        dataset = {}
+        for partition in ["train", "val", "test"]:
+            length_list = []
+            all_data = []
+            label = []
+            if partition == "train":
+                dataset_loader = self.train_loader.dataset.train_data_list
+            elif partition == "val":
+                dataset_loader = self.val_loader.dataset.val_data_list
+            else:
+                dataset_loader = self.test_loader.dataset.test_data_list
+            for i in range(len(dataset_loader)):
+                data = dataset_loader[i]
+                all_data.extend(data.valid_values)
+                length_list.append(len(data.valid_values))
+                label.extend([1 if id in data.abnormal_regions else 0 for id, value in enumerate(data.valid_values)])
+            dataset[partition] = all_data
+            dataset[partition + '_length'] = length_list
+            dataset[partition + '_label'] = label
+        return dataset
+    
+    def repreprocess_datum(self, datum, kernel_size):
+        window_data_list = []
+        for i in range(len(datum) // kernel_size):
+            window_data_list.append(datum[i * kernel_size : (i + 1) * kernel_size])
+        if len(datum) % kernel_size != 0:
+            window_data_list.append(datum[-kernel_size:])
+        return window_data_list
+
+    def repreprocess_data(
+        self, data, kernel_size
+    ):
+        all_data = []
+        for datum in data:
+            datum = self.repreprocess_datum(datum, kernel_size)
+            all_data.extend(datum)
+        return all_data
+    
+    def split_distances(self, distances, length_list):
+        i = 0
+        splitted_distances = []
+        for length in length_list:
+            splitted_distances.append(distances[i:i+length])
+            i = i + length
+        return splitted_distances
+    
+    def distance(self, data, mean, cov_inv):
+        distances = []
+        for datum in data:
+            distances.append(distance.mahalanobis(datum, mean, cov_inv))
+        return np.array(distances)
