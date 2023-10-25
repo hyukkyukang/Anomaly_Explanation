@@ -4,11 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-    
-    
-
-
-
         {
             "name": "Python: Train DBSherlock",
             "type": "python",
@@ -18,14 +13,14 @@
             "justMyCode": true,
             "args": [
                 "--anormly_ratio=4",
-                "--num_epochs=10",
+                "--num_epochs=100",
                 "--batch_size=1024",
                 "--mode=train",
                 "--dataset=DBS",
                 "--win_size=25",
                 "--step_size=25",
-                // "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
-                "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
+                // "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
+                "--dataset_path=dataset/dbsherlock/converted/tpce_3000_test.json",
             ]
         },
         {
@@ -41,10 +36,26 @@
                 "--batch_size=512",
                 "--mode=test",
                 "--dataset=DBS",
-                // "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
-                "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
-                "--input_c=200",
-                "--output_c=200",
+                // "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
+                "--dataset_path=dataset/dbsherlock/converted/tpce_3000_test.json",
+                "--win_size=25",
+                "--step_size=25",
+            ]
+        },
+        {
+            "name": "Python: Inference DBSherlock",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--anormly_ratio=1.0",
+                "--num_epochs=100",
+                "--batch_size=512",
+                "--mode=infer",
+                "--dataset=DBS",
+                "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
                 "--win_size=25",
                 "--step_size=25",
             ]
@@ -61,6 +72,47 @@
                 "--out_dir=dataset/dbsherlock/converted/",
                 "--prefix=tpce_3000",
             ]
-        }
+        },
+        {
+            "name": "Python: Train EDA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--num_epochs=20",
+                "--mode=train",
+                "--dataset=EDA",
+                "--dataset_path=dataset/EDA/",
+            ]
+        },
+        {
+            "name": "Python: Test EDA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--mode=test",
+                "--dataset=EDA",
+                "--dataset_path=dataset/EDA/",
+            ]
+        },
+        {
+            "name": "Python: Inference EDA",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--mode=infer",
+                "--dataset=EDA",
+                "--dataset_path=dataset/EDA/",
+                "--output_path=dataset/EDA/",
+            ]
+        },
     ]
 }

@@ -83,40 +83,31 @@ bash ./scripts/experiment/DBS.sh
 or you can run the below commands to train and evaluate the model step by step.
 
 ### Training
+Train the model on DBSherlock dataset:
 ```bash
 python main.py \
-    --anormly_ratio 2 \
-    --num_epochs 10  \
-    --batch_size 256  \
-    --input_c 200 \
-    --output_c 200 \
-    --win_size 25 \
-    --step_size 25 \
-    --dataset DBS \
-    --data_path dataset/processed_dataset \
+    --dataset EDA \
+    --dataset_path dataset/EDA/ \
     --mode train
 ```
 
 ### Evaluating
+Evaluate the trained model on the test split of the same dataset:
 ```bash
 python main.py \
-    --anormly_ratio 2 \
-    --num_epochs 10 \
-    --batch_size 256 \
-    --input_c 200 \
-    --output_c 200 \
-    --win_size 25 \
-    --step_size 25 \
-    --pretrained_model 20 \
-    --dataset DBS \
-    --data_path dataset/processed_dataset \
+    --dataset EDA \
+    --dataset_path dataset/EDA/ \
     --mode test 
 ```
 
-### Testing
-
+### Inference
+Perform inference on time series data with the trained model:
 ```bash
-python ...
+python main.py \
+    --dataset EDA \
+    --dataset_path dataset/EDA/ \
+    --mode infer
+    --output_path results/EDA/
 ```
 
 ## Reference

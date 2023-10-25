@@ -1,21 +1,24 @@
+import functools
+import json
 import logging
 import os
+import pickle
 from typing import *
 
 import numpy as np
 import torch
 import torch.nn as nn
+from scipy.spatial import distance
+from sklearn.decomposition import PCA
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 
 from data_factory.dataloader import get_dataloader
 from model.AnomalyTransformer import AnomalyTransformer
-from src.data_factory.data import ANOMALY_CAUSES
+from src.data_factory.dataset.eda import FEATURES, EDADataset
 from utils.utils import *
 
-from scipy.spatial import distance
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 np.random.seed(2000)
 logger = logging.getLogger("Solver")
 
@@ -84,7 +87,17 @@ class EarlyStopping:
         self.delta = delta
         self.dataset = dataset_name
 
-    def __call__(self, val_loss, val_loss2, val_loss3, accuracy, model, path):
+    def __call__(
+        self,
+        val_loss,
+        val_loss2,
+        val_loss3,
+        accuracy,
+        model,
+        scaler,
+        model_path,
+        scaler_path,
+    ):
         score = -val_loss
         score2 = -val_loss2
         score3 = -val_loss3
@@ -93,7 +106,9 @@ class EarlyStopping:
             self.best_score2 = score2
             self.best_score3 = score3
             self.best_accuracy = accuracy
-            self.save_checkpoint(val_loss, val_loss2, val_loss3, model, path)
+            self.save_checkpoint(
+                val_loss, val_loss2, val_loss3, model, scaler, model_path, scaler_path
+            )
         elif (
             (
                 score < self.best_score + self.delta
@@ -111,15 +126,23 @@ class EarlyStopping:
             self.best_score2 = score2
             self.best_score3 = score3
             self.best_accuracy = accuracy
-            self.save_checkpoint(val_loss, val_loss2, val_loss3, model, path)
+            self.save_checkpoint(
+                val_loss, val_loss2, val_loss3, model, scaler, model_path, scaler_path
+            )
             self.counter = 0
 
-    def save_checkpoint(self, val_loss, val_loss2, val_loss3, model, path):
+    def save_checkpoint(
+        self, val_loss, val_loss2, val_loss3, model, scaler, model_path, scaler_path
+    ):
         if self.verbose:
             logger.info(
                 f"Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ..."
             )
-        torch.save(model.state_dict(), path)
+        # Save model
+        torch.save(model.state_dict(), model_path)
+        # Save data scaler
+        with open(scaler_path, "wb") as f:
+            pickle.dump(scaler, f)
         self.val_loss_min = val_loss
         self.val_loss2_min = val_loss2
         self.val_loss3_min = val_loss3
@@ -131,38 +154,39 @@ class Solver(object):
     def __init__(self, config):
         self.__dict__.update(Solver.DEFAULTS, **config)
 
-        self.train_loader = get_dataloader(
-            data_path=self.data_path,
-            batch_size=self.batch_size,
-            win_size=self.win_size,
-            step=self.step_size,
-            mode="train",
-            dataset=self.dataset,
-        )
-        self.val_loader = get_dataloader(
-            data_path=self.data_path,
-            batch_size=self.batch_size,
-            win_size=self.win_size,
-            step=self.step_size,
-            mode="val",
-            dataset=self.dataset,
-        )
-        self.test_loader = get_dataloader(
-            data_path=self.data_path,
-            batch_size=self.batch_size,
-            win_size=self.win_size,
-            step=self.step_size,
-            mode="test",
-            dataset=self.dataset,
-        )
-        self.thre_loader = get_dataloader(
-            data_path=self.data_path,
-            batch_size=self.batch_size,
-            win_size=self.win_size,
-            step=self.step_size,
-            mode="thre",
-            dataset=self.dataset,
-        )
+        if self.dataset_path:
+            self.train_loader = get_dataloader(
+                dataset_path=self.dataset_path,
+                batch_size=self.batch_size,
+                win_size=self.win_size,
+                step=self.step_size,
+                mode="train",
+                dataset=self.dataset,
+            )
+            self.val_loader = get_dataloader(
+                dataset_path=self.dataset_path,
+                batch_size=self.batch_size,
+                win_size=self.win_size,
+                step=self.step_size,
+                mode="val",
+                dataset=self.dataset,
+            )
+            self.test_loader = get_dataloader(
+                dataset_path=self.dataset_path,
+                batch_size=self.batch_size,
+                win_size=self.win_size,
+                step=self.step_size,
+                mode="test",
+                dataset=self.dataset,
+            )
+            self.thre_loader = get_dataloader(
+                dataset_path=self.dataset_path,
+                batch_size=self.batch_size,
+                win_size=self.win_size,
+                step=self.step_size,
+                mode="thre",
+                dataset=self.dataset,
+            )
         self.build_model()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss()
@@ -172,13 +196,46 @@ class Solver(object):
         self.find_best = config["find_best"]
         self.add_stats = config["add_stats"]
         self.loaded_dataset = self.load_dataset()
+
     @property
     def model_save_path(self) -> str:
         return os.path.join(self.model_dir_path, f"{self.dataset}_checkpoint.pth")
 
+    @property
+    def scaler_save_path(self) -> str:
+        return os.path.join(self.model_dir_path, f"{self.dataset}_scaler.pkl")
+
+    @property
+    def config_save_path(self) -> str:
+        return os.path.join(self.model_dir_path, f"{self.dataset}_config.json")
+
+    @functools.cached_property
+    def scoring_configs(self) -> Tuple[float, float, float]:
+        # Compute energy
+        val_energy, val_labels, val_overlap_mask = self.get_attention_energy(
+            dataloader=self.val_loader, return_overlap_mask=True
+        )
+        # Get threshold
+        if self.find_best:
+            anomaly_threshold, stats_weight, stats_feat_dim = self.find_best_threshold(
+                val_energy, val_labels, val_overlap_mask
+            )
+        else:
+            anomaly_threshold = np.percentile(val_energy, 100 - self.anormly_ratio)
+            stats_weight = 0
+            stats_feat_dim = 0
+
+        return anomaly_threshold, stats_weight, stats_feat_dim
+
     def build_model(self):
+        num_anomaly_causes = len(self.train_loader.dataset.anomaly_causes)
+        num_features = len(self.train_loader.dataset.dataset.data[0].valid_attributes)
         self.model = AnomalyTransformer(
-            win_size=self.win_size, enc_in=self.input_c, c_out=self.output_c, e_layers=3
+            win_size=self.win_size,
+            enc_in=num_features,
+            c_out=num_features,
+            e_layers=3,
+            n_classes=num_anomaly_causes,
         )
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
@@ -243,7 +300,9 @@ class Solver(object):
                 vali_loss3,
                 accuracy,
                 self.model,
+                self.train_loader.dataset.scaler,
                 self.model_save_path,
+                self.scaler_save_path,
             )
             if early_stopping.early_stop:
                 logger.info("Early stopping")
@@ -251,6 +310,21 @@ class Solver(object):
 
             adjust_learning_rate(self.optimizer, epoch + 1, self.lr)
 
+        # Figure out the best threshold in validation set
+        with torch.no_grad():
+            self.model.eval()
+            anomaly_threshold, stats_weight, stats_feat_dim = self.scoring_configs
+            configs = {
+                "anomaly_threshold": anomaly_threshold,
+                "stats_weight": stats_weight,
+                "stats_feat_dim": stats_feat_dim,
+            }
+            logger.info(json.dumps(configs, indent=4))
+            logger.info(f"Saving config to {self.config_save_path}")
+            with open(self.config_save_path, "w") as f:
+                f.write(json.dumps(configs, indent=4))
+
+    @torch.no_grad()
     def vali(self, data_loader):
         self.model.eval()
 
@@ -277,7 +351,7 @@ class Solver(object):
             gold_cls_probs = (
                 torch.nn.functional.one_hot(
                     classes.long(),
-                    num_classes=len(ANOMALY_CAUSES),
+                    num_classes=len(data_loader.dataset.anomaly_causes),
                 )
                 .float()
                 .cuda()
@@ -294,36 +368,28 @@ class Solver(object):
             cls_correct_cnt += correct_cnt
             cls_num_cnt += total_cnt
 
-        accuracy = cls_correct_cnt / cls_num_cnt
+        accuracy = cls_correct_cnt / cls_num_cnt if cls_num_cnt else 0
 
         return np.average(loss_1), np.average(loss_2), np.average(loss_3), accuracy
 
+    @torch.no_grad()
     def test(self):
+        # Load model
         self.model.load_state_dict(torch.load(self.model_save_path))
         self.model.eval()
 
+        # Load configs
+        with open(self.config_save_path, "r") as f:
+            configs = json.loads(f.read())
+        anomaly_threshold = configs["anomaly_threshold"]
+        stats_weight = configs["stats_weight"]
+        stats_feat_dim = configs["stats_feat_dim"]
+        logger.info(f"Threshold : {anomaly_threshold}")
+        logger.info(f"Stats weight : {stats_weight}")
+        logger.info(f"Stats feat dim : {stats_feat_dim}")
+
         logger.info("======================TEST MODE======================")
 
-        # Find stats on train and validation set
-        train_energy, train_labels = self.get_attention_energy(self.train_loader)
-        val_energy, val_labels = self.get_attention_energy(self.val_loader)
-        val_overlapping_flags = []
-        for i, (input_data, labels, classes, is_overlaps) in enumerate(
-            self.val_loader
-        ):
-            val_overlapping_flags.append(is_overlaps)
-        val_overlapping_flags = np.concatenate(val_overlapping_flags, axis=0).reshape(-1)
-        val_overlapping_flags = np.array(val_overlapping_flags)
-        # Find the threshold
-        # combined_energy = np.concatenate([train_energy, val_energy], axis=0)
-        # combined_labels = np.concatenate([train_labels, val_labels], axis=0)
-
-        if self.find_best:
-            thresh, lamda, dim = self.find_best_threshold(val_energy, val_labels, val_overlapping_flags)
-        else:
-            lamda = None
-            thresh = np.percentile(val_energy, 100 - self.anormly_ratio)
-        logger.info(f"Threshold : {thresh}")
         # Inference on the test set
         criterion = nn.MSELoss(reduction="none")
         test_labels = []
@@ -364,26 +430,111 @@ class Solver(object):
         overlapping_flags = np.array(overlapping_flags)
         cls_preds = np.array(torch.stack(cls_preds).cpu()).reshape(-1)
         cls_golds = np.array(torch.stack(cls_golds).cpu()).reshape(-1)
-        if lamda is not None:
-            if lamda==0.0:
+
+        if stats_weight is not None:
+            if stats_weight == 0.0:
                 test_energy = test_energy
             else:
-                if dim is not None:
-                    stats = self.get_distances('test', 'pca', dim)
+                if stats_feat_dim is not None:
+                    stats = self.get_distances(
+                        mode="test", option="pca", dim=stats_feat_dim
+                    )
                 else:
-                    stats = self.get_distances('test')
-                test_energy = test_energy + lamda*stats
-        # thresh = np.percentile(test_energy, 100 - anomaly_ratio)
+                    stats = self.get_distances(mode="test")
+                test_energy = test_energy + stats_weight * stats
+
         # Evaluate
         accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
             test_energy,
             test_labels,
-            thresh,
+            anomaly_threshold,
             cls_preds=cls_preds,
             cls_golds=cls_golds,
             is_overlapping=overlapping_flags,
         )
         return accuracy, precision, recall, f_score
+
+    @torch.no_grad()
+    def infer(self, data_path: str) -> Any:
+        self.model.load_state_dict(torch.load(self.model_save_path))
+        self.model.eval()
+        # Load scaler
+        with open(self.scaler_save_path, "rb") as f:
+            scaler = pickle.load(f)
+
+        # Get threshold, stats_weight, stats_feat_dim
+        anomaly_threshold, stats_weight, stats_feat_dim = self.scoring_configs
+        logger.info(
+            f"Threshold : {anomaly_threshold}, stat_weight: {stats_weight}, stat_feat_dim: {stats_feat_dim}"
+        )
+
+        # Preprocess input data
+        dataset = EDADataset(
+            mode="test",
+            data_path=data_path,
+            win_size=self.win_size,
+            step=self.step_size,
+            scaler=scaler,
+        )
+        dataloader = DataLoader(
+            dataset=dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+
+        criterion = nn.MSELoss(reduction="none")
+        attens_energy = []
+        cls_preds = []
+        overlapping_flags = []
+        for input_data, _, _, is_overlaps in dataloader:
+            input = input_data.float().to(self.device)
+            cls_output, output, series, prior, _ = self.model(input)
+
+            # Compute series loss and prior loss
+            loss = torch.mean(criterion(input, output), dim=-1)
+            series_loss, prior_loss = self.compute_series_prior_loss(series, prior)
+            metric = torch.softmax((-series_loss - prior_loss), dim=-1)
+            cri = metric * loss
+            cri = cri.detach().cpu().numpy()
+
+            # Compute classification accuracy
+            cls_prob = self.softmax(cls_output)
+            _, cls_predicted = torch.max(cls_prob.data, 2)
+
+            attens_energy.append(cri)
+            cls_preds.append(cls_predicted)
+            overlapping_flags.append(is_overlaps)
+
+        # Aggregate
+        attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
+        cls_preds = np.array(torch.stack(cls_preds).cpu()).reshape(-1)
+        overlapping_flags = np.concatenate(overlapping_flags, axis=0).reshape(-1)
+
+        if stats_weight:
+            # Calculate distance
+            if stats_feat_dim:
+                stats = self.get_distances(
+                    mode="test", option="pca", dim=stats_feat_dim
+                )
+            else:
+                stats = self.get_distances(mode="test")
+
+            # Modify energy
+            attens_energy = attens_energy + stats_weight * stats
+
+        # Filter only non-overlapping regions
+        pred_anomaly = attens_energy > anomaly_threshold
+        attens_energy = attens_energy[overlapping_flags == 0]
+        pred_anomaly = pred_anomaly[overlapping_flags == 0]
+        cls_preds = cls_preds[overlapping_flags == 0]
+        cls_preds = [FEATURES[idx] for idx in cls_preds]
+
+        # Post processing
+        attens_energy = attens_energy.tolist()
+        pred_anomaly = pred_anomaly.tolist()
+
+        return attens_energy, pred_anomaly, cls_preds
 
     def compute_loss(
         self,
@@ -411,7 +562,7 @@ class Solver(object):
         anomaly_causes_probs = (
             torch.nn.functional.one_hot(
                 anomaly_causes.long(),
-                num_classes=len(ANOMALY_CAUSES),
+                num_classes=classify_output.shape[-1],
             )
             .float()
             .cuda()
@@ -605,25 +756,41 @@ class Solver(object):
         return accuracy, precision, recall, f_score
 
     def find_best_threshold(
-        self, val_energy, val_labels, overlapping_flags, ar_range=np.arange(1.0, 5.0, 0.1), lamda_range=np.arange(0.01, 0.05, 0.01), dim_range=np.arange(1, 10, 1)
+        self,
+        val_energy,
+        val_labels,
+        overlapping_flags,
+        ar_range=np.arange(1.0, 5.0, 0.1),
+        lamda_range=np.arange(0.01, 0.05, 0.01),
+        dim_range=np.arange(1, 10, 1),
     ) -> float:
         best_f_score = 0
         best_thresh = None
         best_ar = None
         best_lamda = None
         best_dim = None
-        option='pca'
+        option = "pca"
         logger.info("Finding best threshold...")
         if self.add_stats:
             for dim in dim_range:
-                distances = self.get_distances('val',option,dim)
+                distances = self.get_distances("val", option, dim)
                 for lamda in lamda_range:
                     val_energy_with_distances = val_energy + lamda * distances
                     for anomaly_ratio in ar_range:
                         logger.info(f"Anomaly Ratio: {anomaly_ratio}")
-                        thresh = np.percentile(val_energy_with_distances, 100 - anomaly_ratio)
-                        accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
-                            val_energy_with_distances, val_labels, thresh, is_overlapping=overlapping_flags,
+                        thresh = np.percentile(
+                            val_energy_with_distances, 100 - anomaly_ratio
+                        )
+                        (
+                            accuracy,
+                            precision,
+                            recall,
+                            f_score,
+                        ) = self.get_metrics_for_threshold(
+                            val_energy_with_distances,
+                            val_labels,
+                            thresh,
+                            is_overlapping=overlapping_flags,
                         )
                         if f_score > best_f_score:
                             best_f_score = f_score
@@ -638,7 +805,10 @@ class Solver(object):
                 logger.info(f"Anomaly Ratio: {anomaly_ratio}")
                 thresh = np.percentile(val_energy, 100 - anomaly_ratio)
                 accuracy, precision, recall, f_score = self.get_metrics_for_threshold(
-                    val_energy, val_labels, thresh, is_overlapping=overlapping_flags,
+                    val_energy,
+                    val_labels,
+                    thresh,
+                    is_overlapping=overlapping_flags,
                 )
                 if f_score > best_f_score:
                     best_f_score = f_score
@@ -650,13 +820,14 @@ class Solver(object):
         return best_thresh, best_lamda, best_dim
 
     def get_attention_energy(
-        self, dataloader: DataLoader
+        self, dataloader: DataLoader, return_overlap_mask: bool = False
     ) -> Tuple[np.ndarray, np.ndarray]:
         criterion = nn.MSELoss(reduction="none")
 
         all_labels = []
         all_attens_energy = []
-        for input_data, labels, _, _ in dataloader:
+        all_overlap_mask = []
+        for input_data, labels, _, overlap in dataloader:
             input = input_data.float().to(self.device)
             _, output, series, prior, _ = self.model(input)
             loss = torch.mean(criterion(input, output), dim=-1)
@@ -669,10 +840,18 @@ class Solver(object):
             cri = cri.detach().cpu().numpy()
             all_attens_energy.append(cri)
             all_labels.append(labels)
+            all_overlap_mask.append(overlap)
 
         all_attens_energy = np.concatenate(all_attens_energy, axis=0).reshape(-1)
         all_labels = np.concatenate(all_labels, axis=0).reshape(-1)
+        all_overlap_mask = np.concatenate(all_overlap_mask, axis=0).reshape(-1)
 
+        if return_overlap_mask:
+            return (
+                np.array(all_attens_energy),
+                np.array(all_labels),
+                np.array(all_overlap_mask),
+            )
         return np.array(all_attens_energy), np.array(all_labels)
 
     def detect_adjustment(
@@ -720,6 +899,8 @@ class Solver(object):
                         break
 
                 # get cls preds
+                if start_idx == end_idx:
+                    end_idx += 1
                 cls_pred_sub = classification_preds[start_idx:end_idx]
 
                 # Find the most frequent class
@@ -738,50 +919,59 @@ class Solver(object):
 
         return classification_preds
 
-    def get_distances(self, mode, option='pca', dim=1):
+    def get_distances(self, mode, option="pca", dim=1):
         scaler = StandardScaler()
-        train_data = np.array(scaler.fit_transform(self.loaded_dataset['train']))
-        train_label = np.array(self.loaded_dataset['train_label'])
+        train_data = np.array(scaler.fit_transform(self.loaded_dataset["train"]))
+        train_label = np.array(self.loaded_dataset["train_label"])
         train_data_normal = train_data[np.where(train_label == 0)[0]]
         train_mean = np.mean(train_data_normal, axis=0)
-        
+
         pca = None
-        if option == 'regularize':
+        if option == "regularize":
             regularization_term = 1e-5
             train_covariance = np.cov(train_data_normal, rowvar=False)
-            train_cov_matrix_regularized = train_covariance + regularization_term * np.eye(train_data.shape[1])
+            train_cov_matrix_regularized = (
+                train_covariance + regularization_term * np.eye(train_data.shape[1])
+            )
             train_cov_inv = np.linalg.inv(train_cov_matrix_regularized)
-        elif option == 'pca':
-            n_components=dim
+        elif option == "pca":
+            n_components = dim
             pca = PCA(n_components=n_components)
-            train_data_normal = pca.fit_transform(train_data_normal).reshape(-1, n_components) # Ensure 2D shape
-            train_mean = np.mean(train_data_normal, axis=0).reshape(-1) # Ensure 1D shape
-            train_cov_inv = np.linalg.inv(np.cov(train_data_normal, rowvar=False).reshape(-1, n_components))
+            train_data_normal = pca.fit_transform(train_data_normal).reshape(
+                -1, n_components
+            )  # Ensure 2D shape
+            train_mean = np.mean(train_data_normal, axis=0).reshape(
+                -1
+            )  # Ensure 1D shape
+            train_cov_inv = np.linalg.inv(
+                np.cov(train_data_normal, rowvar=False).reshape(-1, n_components)
+            )
         else:
             raise ValueError("Option should be either 'regularize' or 'pca'.")
 
-        if mode == 'val':
-            data = np.array(scaler.transform(self.loaded_dataset['val']))
+        if mode == "val":
+            data = np.array(scaler.transform(self.loaded_dataset["val"]))
         else:
-            data = np.array(scaler.transform(self.loaded_dataset['test']))
+            data = np.array(scaler.transform(self.loaded_dataset["test"]))
 
         # If PCA option is selected, apply the same transformation to the data
         if pca:
             data = pca.transform(data)
 
         distances = self.distance(data, train_mean, train_cov_inv)
-        if mode == 'val':
-            length_list = self.loaded_dataset['val_length']
+        if mode == "val":
+            length_list = self.loaded_dataset["val_length"]
         else:
-            length_list = self.loaded_dataset['test_length']
-            
+            length_list = self.loaded_dataset["test_length"]
+
         distances = self.split_distances(distances, length_list)
         distances = self.repreprocess_data(distances, self.step_size)
         distances = np.concatenate(distances, axis=0).reshape(-1)
         return distances
-    
-    
-    def load_dataset(self,):
+
+    def load_dataset(
+        self,
+    ):
         dataset = {}
         for partition in ["train", "val", "test"]:
             length_list = []
@@ -797,12 +987,17 @@ class Solver(object):
                 data = dataset_loader[i]
                 all_data.extend(data.valid_values)
                 length_list.append(len(data.valid_values))
-                label.extend([1 if id in data.abnormal_regions else 0 for id, value in enumerate(data.valid_values)])
+                label.extend(
+                    [
+                        1 if id in data.abnormal_regions else 0
+                        for id, value in enumerate(data.valid_values)
+                    ]
+                )
             dataset[partition] = all_data
-            dataset[partition + '_length'] = length_list
-            dataset[partition + '_label'] = label
+            dataset[partition + "_length"] = length_list
+            dataset[partition + "_label"] = label
         return dataset
-    
+
     def repreprocess_datum(self, datum, kernel_size):
         window_data_list = []
         for i in range(len(datum) // kernel_size):
@@ -811,23 +1006,21 @@ class Solver(object):
             window_data_list.append(datum[-kernel_size:])
         return window_data_list
 
-    def repreprocess_data(
-        self, data, kernel_size
-    ):
+    def repreprocess_data(self, data, kernel_size):
         all_data = []
         for datum in data:
             datum = self.repreprocess_datum(datum, kernel_size)
             all_data.extend(datum)
         return all_data
-    
+
     def split_distances(self, distances, length_list):
         i = 0
         splitted_distances = []
         for length in length_list:
-            splitted_distances.append(distances[i:i+length])
+            splitted_distances.append(distances[i : i + length])
             i = i + length
         return splitted_distances
-    
+
     def distance(self, data, mean, cov_inv):
         distances = []
         for datum in data:

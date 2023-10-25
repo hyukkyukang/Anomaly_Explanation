@@ -4,7 +4,6 @@ import torch.nn.functional as F
 
 from .attn import AnomalyAttention, AttentionLayer, seed_num
 from .embed import DataEmbedding
-from src.data_factory.data import ANOMALY_CAUSES
 
 seed_num = seed_num
 torch.manual_seed(seed_num)
@@ -63,11 +62,11 @@ class AnomalyTransformer(nn.Module):
         win_size,
         enc_in,
         c_out,
+        n_classes,
         d_model=512,
         n_heads=8,
         e_layers=3,
         d_ff=512,
-        n_classes=len(ANOMALY_CAUSES),
         dropout=0.0,
         activation="gelu",
         output_attention=True,

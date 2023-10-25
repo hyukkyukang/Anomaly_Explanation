@@ -4,20 +4,6 @@ from typing import *
 import hkkang_utils.data as data_utils
 import numpy as np
 
-ANOMALY_CAUSES = [
-    "No Anomaly",
-    "Poorly Written Query",
-    "Poor Physical Design",
-    "Workload Spike",
-    "I/O Saturation",
-    "DB Backup",
-    "Table Restore",
-    "CPU Saturation",
-    "Flush Log/Table",
-    "Network Congestion",
-    "Lock Contention",
-]
-
 
 @data_utils.dataclass
 class AnomalyData:
@@ -26,6 +12,7 @@ class AnomalyData:
     values: List[List[float]]  # shape: (time, attribute)
     normal_regions: List[int]  # list of normal region indices
     abnormal_regions: List[int]  # list of abnormal region indices
+    skip_first_two_attributes: bool = data_utils.field(default=True)
 
     @functools.cached_property
     def values_as_np(self) -> np.ndarray:
@@ -49,14 +36,20 @@ class AnomalyData:
 
     @functools.cached_property
     def valid_attributes(self) -> List[str]:
-        return [self.attributes[i] for i in range(2, len(self.attributes))]
+        if self.skip_first_two_attributes:
+            return self.attributes[2:]
+        return self.attributes
 
     @functools.cached_property
     def valid_values(self) -> np.ndarray:
         """Get all values"""
         tmp = []
         for values_in_time in self.values:
-            tmp.append([values_in_time[i] for i in range(2, len(self.attributes))])
+            if self.skip_first_two_attributes:
+                values = values_in_time[2:]
+            else:
+                values = values_in_time
+            tmp.append(values)
         return tmp
 
     @functools.cached_property

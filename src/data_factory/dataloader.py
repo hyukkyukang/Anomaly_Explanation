@@ -1,30 +1,45 @@
 from torch.utils.data import DataLoader
 
 from src.data_factory.dataset.dbsherlock import DBSherlockDataset
+from src.data_factory.dataset.eda import EDADataset
 from src.data_factory.dataset.msl import MSLDataset
 from src.data_factory.dataset.psm import PSMDataset
-from src.data_factory.dataset.smd import SMDDataset
 from src.data_factory.dataset.smap import SMAPDataset
+from src.data_factory.dataset.smd import SMDDataset
 
 
 def get_dataloader(
-    data_path: str,
+    dataset_path: str,
     batch_size: int,
-    win_size: int = 100,
-    step: int = 100,
-    mode: str = "train",
-    dataset: str = "KDD",
+    win_size: int = 25,
+    step: int = 25,
+    mode: str = "test",
+    dataset: str = "EDA",
 ) -> DataLoader:
     if dataset == "SMD":
-        dataset = SMDDataset(data_path, win_size, step, mode)
+        dataset = SMDDataset(
+            dataset_path=dataset_path, win_size=win_size, step=step, mode=mode
+        )
     elif dataset == "MSL":
-        dataset = MSLDataset(data_path, win_size, 1, mode)
+        dataset = MSLDataset(
+            dataset_path=dataset_path, win_size=win_size, step=1, mode=mode
+        )
     elif dataset == "SMAP":
-        dataset = SMAPDataset(data_path, win_size, 1, mode)
+        dataset = SMAPDataset(
+            dataset_path=dataset_path, win_size=win_size, step=1, mode=mode
+        )
     elif dataset == "PSM":
-        dataset = PSMDataset(data_path, win_size, 1, mode)
+        dataset = PSMDataset(
+            dataset_path=dataset_path, win_size=win_size, step=1, mode=mode
+        )
     elif dataset == "DBS":
-        dataset = DBSherlockDataset(data_path, win_size, step, mode)
+        dataset = DBSherlockDataset(
+            dataset_path=dataset_path, win_size=win_size, step=step, mode=mode
+        )
+    elif dataset == "EDA":
+        dataset = EDADataset(
+            dataset_path=dataset_path, win_size=win_size, step=step, mode=mode
+        )
 
     do_shuffle = mode == "train"
 
