@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 from data_factory.dataloader import get_dataloader
 from model.AnomalyTransformer import AnomalyTransformer
-from src.data_factory.dataset.eda import FEATURES, EDADataset
+from src.data_factory.dataset.eda import ANOMALY_CAUSES, EDADataset
 from utils.utils import *
 
 np.random.seed(2000)
@@ -458,6 +458,7 @@ class Solver(object):
     def infer(self, data_path: str) -> Any:
         self.model.load_state_dict(torch.load(self.model_save_path))
         self.model.eval()
+
         # Load scaler
         with open(self.scaler_save_path, "rb") as f:
             scaler = pickle.load(f)
@@ -528,7 +529,7 @@ class Solver(object):
         attens_energy = attens_energy[overlapping_flags == 0]
         pred_anomaly = pred_anomaly[overlapping_flags == 0]
         cls_preds = cls_preds[overlapping_flags == 0]
-        cls_preds = [FEATURES[idx] for idx in cls_preds]
+        cls_preds = [ANOMALY_CAUSES[idx] for idx in cls_preds]
 
         # Post processing
         attens_energy = attens_energy.tolist()
