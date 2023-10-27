@@ -51,6 +51,7 @@ def parse_args():
     parser.add_argument("--random_seed", type=int, default=25)
     parser.add_argument("--find_best", type=bool, default=True)
     parser.add_argument("--add_stats", type=bool, default=False)
+    parser.add_argument("--add_classifier", type=bool, default=False)
     return parser.parse_args()
 
 

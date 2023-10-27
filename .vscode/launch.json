@@ -25,7 +25,7 @@
                 "--win_size=25",
                 "--step_size=25",
                 // "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
-                "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
+                "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
             ]
         },
         {
@@ -36,13 +36,13 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--anormly_ratio=1.0",
+                "--anormly_ratio=1",
                 "--num_epochs=100",
-                "--batch_size=512",
+                "--batch_size=1024",
                 "--mode=test",
                 "--dataset=DBS",
                 // "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
-                "--data_path=dataset/dbsherlock/converted/tpce_3000_test.json",
+                "--data_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
                 "--input_c=200",
                 "--output_c=200",
                 "--win_size=25",

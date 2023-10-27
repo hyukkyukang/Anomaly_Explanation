@@ -169,8 +169,6 @@ class Solver(object):
         self.cross_entropy = nn.CrossEntropyLoss()
         self.softmax = nn.Softmax(dim=2)
         self.temperature = 50
-        self.find_best = config["find_best"]
-        self.add_stats = config["add_stats"]
         self.loaded_dataset = self.load_dataset()
     @property
     def model_save_path(self) -> str:
@@ -218,8 +216,11 @@ class Solver(object):
 
                 # Minimax strategy
                 loss1.backward(retain_graph=True)
-                loss2.backward(retain_graph=True)
-                loss3.backward()
+                if self.add_classifier:
+                    loss2.backward(retain_graph=True)
+                    loss3.backward()
+                else:
+                    loss2.backward()
                 self.optimizer.step()
 
             avg_train_loss = np.average(loss1_list)
@@ -426,7 +427,10 @@ class Solver(object):
 
         loss1 = rec_loss - self.k * series_loss
         loss2 = rec_loss + self.k * prior_loss
-        loss3 = classification_loss
+        if self.add_classifier:
+            loss3 = classification_loss
+        else:
+            loss3 = 0.0
 
         return loss1, loss2, loss3
 
