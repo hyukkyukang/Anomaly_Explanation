@@ -1,0 +1,26 @@
+model:
+  win_size: 25
+  step_size: 25
+  num_anomaly_cause: 5
+  num_feature: 29
+  num_e_layer: 3
+  k: 3
+dataset:
+  name: EDA
+  path: dataset/EDA/
+optimizer:
+  lr: 0.0001
+  num_epoch: 20
+seed: 25
+find_best: true
+add_stats: true
+output_path: results/
+model_path: checkpoints/EDA_checkpoint.pth
+scaler_path: checkpoints/EDA_scaler.pkl
+stats_path: checkpoints/EDA_stats.json
+anomaly_ratio: 0.5
+device: cuda
+train:
+  batch_size: 1024
+  patience: 20
+  verbose: true

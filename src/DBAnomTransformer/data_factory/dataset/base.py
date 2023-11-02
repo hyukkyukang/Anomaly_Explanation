@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
 
-from src.data_factory.data import AnomalyData, AnomalyDataset
+from DBAnomTransformer.data_factory.data import AnomalyData, AnomalyDataset
 
 
 @data_utils.dataclass
@@ -19,6 +19,15 @@ class TimeSegment:
     is_anomaly: List[bool]
     is_overlap: List[bool]
     anomaly_cause: List[int]
+
+    def to_item(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        value: np.ndarray = self.value
+        label: List[bool] = self.is_anomaly
+        cause: List[int] = self.anomaly_cause
+        is_overlap: List[bool] = self.is_overlap
+
+        # Return
+        return value, np.float32(label), np.float32(cause), np.float32(is_overlap)
 
 
 class AnomalyTransformerDataset(torch.utils.data.Dataset):
@@ -98,7 +107,9 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
             # Fit scaler
             segments_for_fitting = list_utils.do_flatten_list(
                 [
-                    self.create_time_segments(d, win_size=self.win_size)
+                    self.create_time_segments(
+                        d, win_size=self.win_size, anomaly_causes=self.anomaly_causes
+                    )
                     for d in data_for_fitting
                 ]
             )
@@ -107,7 +118,9 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
             # Create time segments
             time_segments = list_utils.do_flatten_list(
                 [
-                    self.create_time_segments(d, win_size=self.win_size)
+                    self.create_time_segments(
+                        d, win_size=self.win_size, anomaly_causes=self.anomaly_causes
+                    )
                     for d in data_list
                 ]
             )
@@ -126,13 +139,7 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
         self, index: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         # Get data
-        value: np.ndarray = self.time_segments[index].value
-        label: List[bool] = self.time_segments[index].is_anomaly
-        cause: List[int] = self.time_segments[index].anomaly_cause
-        is_overlap: List[bool] = self.time_segments[index].is_overlap
-
-        # Return
-        return value, np.float32(label), np.float32(cause), np.float32(is_overlap)
+        return self.time_segments[index].to_item()
 
     @abc.abstractmethod
     def load_data(self, path: str) -> AnomalyDataset:
@@ -144,8 +151,12 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
         """Load anomaly dataset from the given path"""
         raise NotImplementedError("Implement this method on the child class")
 
+    @classmethod
     def create_time_segments(
-        self, data: AnomalyData, win_size: int
+        self,
+        data: AnomalyData,
+        win_size: int,
+        anomaly_causes: Optional[List[str]] = None,
     ) -> List[TimeSegment]:
         segments: List[TimeSegment] = []
         total_time = len(data.values)
@@ -174,7 +185,10 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
                 idx in data.valid_abnormal_regions
                 for idx in range(start_time, end_time)
             ]
-            cause = self.anomaly_causes.index(data.cause)
+            if anomaly_causes:
+                cause = anomaly_causes.index(data.cause)
+            else:
+                cause = 0
             anomaly_cause = [cause if is_anomaly[idx] else 0 for idx in range(win_size)]
             segments.append(
                 TimeSegment(

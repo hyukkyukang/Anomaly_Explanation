@@ -6,7 +6,7 @@ from typing import *
 import random
 import numpy as np
 import tqdm
-from data_factory.data import anomaly_causes
+from DBAnomTransformer.data_factory.data import anomaly_causes
 
 
 def partition(train_num, seed=None):

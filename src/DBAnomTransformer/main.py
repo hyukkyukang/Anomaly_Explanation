@@ -6,7 +6,7 @@ import random
 import hkkang_utils.file as file_utils
 from torch.backends import cudnn
 
-from src.solver import Solver
+from DBAnomTransformer.solver import Solver
 from utils.utils import *
 
 logger = logging.getLogger("main")

@@ -7,7 +7,8 @@ import numpy as np
 from sklearn.covariance import MinCovDet
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from src.data_factory.dataset.dbsherlock import DBSherlockDataset
+from DBAnomTransformer.data_factory.dataset.dbsherlock import DBSherlockDataset
+
 warnings.filterwarnings("ignore")
 
 
@@ -54,6 +55,7 @@ def feature_extraction_with_pca(data, top_n=1):
 def normalize(dataset):
     return (dataset - np.min(dataset)) / (np.max(dataset) - np.min(dataset))
 
+
 def load_dataset(data_path):
     dataset = DBSherlockDataset(data_path, 25, 25)
     dataset_dict = {}
@@ -72,16 +74,24 @@ def load_dataset(data_path):
             data = dataset_loader[i]
             all_data.extend(data.valid_values)
             length_list.append(len(data.valid_values))
-            label.extend([1 if id in data.abnormal_regions else 0 for id, value in enumerate(data.valid_values)])
+            label.extend(
+                [
+                    1 if id in data.abnormal_regions else 0
+                    for id, value in enumerate(data.valid_values)
+                ]
+            )
         dataset_dict[partition] = np.array(normalize(all_data))
-        dataset_dict[partition + '_length'] = np.array(length_list)
-        dataset_dict[partition + '_label'] = np.array(label)
+        dataset_dict[partition + "_length"] = np.array(length_list)
+        dataset_dict[partition + "_label"] = np.array(label)
     return dataset_dict
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--data_path", type=str, default="dataset/dbsherlock/converted/tpcc_500w_test.json"
+        "--data_path",
+        type=str,
+        default="dataset/dbsherlock/converted/tpcc_500w_test.json",
     )
     parser.add_argument("--dim", default=15)
     parser.add_argument("--find_best", default=True)
@@ -98,8 +108,7 @@ if __name__ == "__main__":
     dataset_dict = load_dataset(data_path)
     pca = PCA(n_components=dim)
     train_data_pca = pca.fit_transform(dataset_dict["train"])
-    
-    
+
     # if feature_extraction:
     #     top_idx = feature_extraction_with_pca(dataset_dict["test"], dim)
     #     principal_components = dataset_dict["test"][:, top_idx]
@@ -134,7 +143,9 @@ if __name__ == "__main__":
     else:
         percentile = 99
     principal_components_test = pca.transform(dataset_dict["test"])
-    distances = mcd_train.mahalanobis(principal_components_test - mcd_train.location_) ** (0.5)
+    distances = mcd_train.mahalanobis(
+        principal_components_test - mcd_train.location_
+    ) ** (0.5)
     distances_with_idx = list(zip(range(0, len(distances)), distances))
     pctile_cutoff = np.percentile(distances_with_idx, percentile)
     filtered_distances = (distances.tolist() > pctile_cutoff).astype(int)

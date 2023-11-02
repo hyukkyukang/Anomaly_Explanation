@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "DBAnomTransformer"
+version = "0.1.6"
+authors = [{name="Hyukkyu Kang", email="hyukkyukang@gmail.com"}]
+description = "A collection of useful util functions"
+readme = "README.md"
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies=[
+    "wget",
+    "gdown",
+    "Pillow",
+    "pandas",
+    "scikit-learn",
+    "hkkang_utils",
+    "omegaconf",
+    "hydra-core",
+    "pandas"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/pshlego/Anomaly_Explanation"
+"Bug Tracker" = "https://github.com/pshlego/Anomaly_Explanation/issues"

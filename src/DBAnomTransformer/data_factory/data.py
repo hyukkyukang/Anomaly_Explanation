@@ -3,6 +3,7 @@ from typing import *
 
 import hkkang_utils.data as data_utils
 import numpy as np
+import pandas as pd
 
 
 @data_utils.dataclass
@@ -71,6 +72,20 @@ class AnomalyData:
         valid_regions = self.valid_normal_regions + self.abnormal_regions
         training_indices = [i for i in range(len(self.values)) if i in valid_regions]
         return self.values_as_np[training_indices:]
+
+    @classmethod
+    def from_dataframe(self, dataframe: pd.DataFrame) -> "AnomalyData":
+        """Create AnomalyData from pandas dataframe"""
+        attributes = list(dataframe.columns)
+        values = dataframe.to_numpy().tolist()
+        return AnomalyData(
+            cause="",
+            attributes=attributes,
+            values=values,
+            normal_regions=[],
+            abnormal_regions=[],
+            skip_first_two_attributes=False,
+        )
 
 
 @data_utils.dataclass

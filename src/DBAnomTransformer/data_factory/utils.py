@@ -5,7 +5,7 @@ import hkkang_utils.list as list_utils
 import numpy as np
 import tqdm
 
-from data_factory.data import AnomalyData, AnomalyDataset
+from DBAnomTransformer.data_factory.data import AnomalyData, AnomalyDataset
 
 logger = logging.getLogger("DBSherlockDataConverter")
 

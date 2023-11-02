@@ -4,3 +4,6 @@ Pillow
 pandas
 scikit-learn
 hkkang_utils
+omegaconf
+hydra-core
+pandas

@@ -1,0 +1,30 @@
+seed: 25
+find_best: True
+add_stats: True
+output_path: results/
+model_path: checkpoints/EDA_checkpoint.pth
+scaler_path: checkpoints/EDA_scaler.pkl
+stats_path: checkpoints/EDA_stats.json
+default_anomaly_threshold: 0.5
+# device: cuda
+device: cpu
+
+train:
+    batch_size: 1024
+    patience: 20
+    verbose: true
+
+
+hydra:
+    run:
+        dir: ./
+    job:
+        chdir: False
+    output_subdir: logs/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+
+defaults:
+  - model: base
+  - dataset: eda
+  - optimizer: base
+  - _self_

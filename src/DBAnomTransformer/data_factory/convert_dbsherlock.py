@@ -6,8 +6,8 @@ from typing import *
 import hkkang_utils.file as file_utils
 import scipy
 
-from data_factory.data import AnomalyDataset
-from data_factory.utils import create_anomaly_dataset
+from DBAnomTransformer.data_factory.data import AnomalyDataset
+from DBAnomTransformer.data_factory.utils import create_anomaly_dataset
 
 logger = logging.getLogger("DataConverter")
 

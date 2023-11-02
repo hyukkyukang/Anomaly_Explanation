@@ -75,7 +75,7 @@ python src/data_factory/dbsherlock/process.py \
     --output_path dataset/dbsherlock/processed/tpce_3000/
 ```
 
-## Train and Evaluate
+## Reproducing Experiments
 We provide the experiment scripts under the folder `./scripts`. You can reproduce the experiment results with the below script:
 ```bash
 bash ./scripts/experiment/DBS.sh
@@ -85,7 +85,7 @@ or you can run the below commands to train and evaluate the model step by step.
 ### Training
 Train the model on DBSherlock dataset:
 ```bash
-python main.py \
+python src/DBAnomTransformer/main.py \
     --dataset EDA \
     --dataset_path dataset/EDA/ \
     --mode train
@@ -94,20 +94,52 @@ python main.py \
 ### Evaluating
 Evaluate the trained model on the test split of the same dataset:
 ```bash
-python main.py \
+python src/DBAnomTransformer/main.py \
     --dataset EDA \
     --dataset_path dataset/EDA/ \
     --mode test 
 ```
 
-### Inference
-Perform inference on time series data with the trained model:
+## Inference
+Download the package through pip
 ```bash
-python main.py \
-    --dataset EDA \
-    --dataset_path dataset/EDA/ \
-    --mode infer
-    --output_path results/EDA/
+pip install DBAnomTransformer
+```
+Load the trained model and use it to detect anomaly in new data:
+```python
+import numpy as np
+import pandas as pd
+
+from DBAnomTransformer.detector import DBAnomDector
+
+# Create dummy data
+dummy_data = np.random.rand(130, 29)
+dummy_data = pd.DataFrame(dummy_data, columns=[f"attr_{i}" for i in range(29)])
+
+# Load model
+detector = DBAnomDector()
+# Train model
+detector.train(dataset_path="dataset/EDA/")
+# Run inference (detect anomaly
+anomaly_score, is_anomaly, anomaly_cause = detector.infer(data=dummy_data)
+```
+
+Note that the dataset folder should be organized as follows:
+```text
+dataset
+├── EDA
+│   ├── meta_data
+│   │   ├── db_backup.csv
+│   │   ├── index.csv
+│   │   ├── ...
+│   │   └── workload_spike.csv
+│   ├── raw_data
+│   │   ├── db_backup_1.csv
+│   │   ├── db_backup_2.csv
+│   │   ├── ...
+│   │   ├── workload_spike_1.csv
+│   │   ├── workload_spike_2.csv
+│   │   ├── ...
 ```
 
 ## Reference
