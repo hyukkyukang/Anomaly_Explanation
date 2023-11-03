@@ -47,6 +47,9 @@ class DBSherlockDataset(AnomalyTransformerDataset):
         logger.info(f"Loading dataset from {path}")
         dataset_dic: Dict = file_utils.read_json_file(path)
         dataset = AnomalyDataset.from_dict(data=dataset_dic)
+        # Add skip_first_two_attributes
+        for datum in dataset.data:
+            datum.skip_first_two_attributes = True
         # Save to cache
         logger.info(f"Saving dataset to {cache_path}")
         file_utils.write_pickle_file(dataset, cache_path)

@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
 
-from DBAnomTransformer.config.utils import default_config
+from DBAnomTransformer.config.utils import default_config, recursive_override
 from DBAnomTransformer.data_factory.data import AnomalyData
 from DBAnomTransformer.data_factory.dataloader import get_dataloader
 from DBAnomTransformer.data_factory.dataset.base import AnomalyTransformerDataset
@@ -33,8 +33,13 @@ logger = logging.getLogger("AnomalyDetector")
 
 
 class DBAnomDector:
-    def __init__(self, config: Optional[omegaconf.DictConfig] = default_config) -> None:
+    def __init__(
+        self,
+        config: Optional[omegaconf.DictConfig] = default_config,
+        override_config: Optional[omegaconf.DictConfig] = None,
+    ) -> None:
         self.config = config
+        self.override_config = override_config
         self.model: AnomalyTransformer = None
         self.scaler: StandardScaler = None
         self.stats: Dict[str, Any] = None
@@ -45,6 +50,11 @@ class DBAnomDector:
         self.__post_init__()
 
     def __post_init__(self) -> None:
+        # Override configs
+        if self.override_config:
+            assert isinstance(self.override_config, omegaconf.DictConfig)
+            self.config = recursive_override(self.config, self.override_config)
+        # Set device
         if "cuda" in self.config.device:
             assert torch.cuda.is_available(), "CUDA is not available"
         self.device = torch.device(self.config.device)
@@ -80,7 +90,9 @@ class DBAnomDector:
                 f"Model path {self.config.model_path} does not exist. Make sure to train model first."
             )
 
-    def get_dataloaders(self, dataset_path: str) -> Tuple[torch.utils.data.DataLoader]:
+    def get_dataloaders(
+        self, dataset_path: str, dataset_name: Optional[str] = None
+    ) -> Tuple[torch.utils.data.DataLoader]:
         logger.info(f"Loading dataset from {dataset_path}")
         train_dataloader = get_dataloader(
             dataset_path=dataset_path,
@@ -88,7 +100,7 @@ class DBAnomDector:
             win_size=self.config.model.win_size,
             step=self.config.model.step_size,
             mode="train",
-            dataset=self.config.dataset.name,
+            dataset=dataset_name if dataset_name else self.config.dataset.name,
         )
         val_dataloader = get_dataloader(
             dataset_path=dataset_path,
@@ -96,7 +108,7 @@ class DBAnomDector:
             win_size=self.config.model.win_size,
             step=self.config.model.step_size,
             mode="val",
-            dataset=self.config.dataset.name,
+            dataset=dataset_name if dataset_name else self.config.dataset.name,
         )
         # Check num anomaly & num feature
         num_anomly_from_data = len(train_dataloader.dataset.anomaly_causes)
@@ -113,7 +125,9 @@ class DBAnomDector:
 
         return train_dataloader, val_dataloader
 
-    def train(self, dataset_path: Optional[str] = None) -> None:
+    def train(
+        self, dataset_path: Optional[str] = None, dataset_name: Optional[str] = None
+    ) -> None:
         # To train model
         self.model.train()
         # Set optimizer
@@ -123,14 +137,18 @@ class DBAnomDector:
         # Set dataset path
         if dataset_path is None:
             dataset_path = self.config.dataset.path
+        if dataset_name is None:
+            dataset_name = self.config.dataset.name
         # Get dataset loaders
-        train_dataloader, val_dataloader = self.get_dataloaders(dataset_path)
+        train_dataloader, val_dataloader = self.get_dataloaders(
+            dataset_path, dataset_name
+        )
         # Dataset for threshold finding
         loaded_dataset = load_dataset(train_dataloader, val_dataloader, None)
         early_stopping = EarlyStopping(
             patience=self.config.train.patience,
             verbose=self.config.train.verbose,
-            dataset_name=self.config.dataset.name,
+            dataset_name=dataset_name if dataset_name else self.config.dataset.name,
         )
         self.scaler = train_dataloader.dataset.scaler
 

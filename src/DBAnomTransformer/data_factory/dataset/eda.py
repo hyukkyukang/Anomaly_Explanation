@@ -13,7 +13,14 @@ logger = logging.getLogger("EDADataset")
 
 SKIP_CAUSES = []
 
-ANOMALY_CAUSES = ["db_backup", "index", "workload_spike", "poor_query", "mem"]
+ANOMALY_CAUSES = [
+    "No Anomaly",
+    "db_backup",
+    "index",
+    "workload_spike",
+    "poor_query",
+    "mem",
+]
 
 SKIP_FEATURES = ["timestamp", "cause"]
 

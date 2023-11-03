@@ -21,6 +21,16 @@ def load_config(path: str) -> OmegaConf:
     return config
 
 
+def recursive_override(config: OmegaConf, override_config: OmegaConf) -> OmegaConf:
+    """Override config recursively."""
+    for key, value in override_config.items():
+        if isinstance(value, dict) or isinstance(value, omegaconf.DictConfig):
+            config[key] = recursive_override(config[key], value)
+        else:
+            config[key] = value
+    return config
+
+
 @hydra.main(
     config_path="../configs/",
     config_name="base",
