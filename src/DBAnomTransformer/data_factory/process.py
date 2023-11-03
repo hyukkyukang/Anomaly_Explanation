@@ -6,7 +6,7 @@ from typing import *
 import random
 import numpy as np
 import tqdm
-from DBAnomTransformer.data_factory.data import anomaly_causes
+from DBAnomTransformer.data_factory.dataset.dbsherlock import ANOMALY_CAUSES
 
 
 def partition(train_num, seed=None):
@@ -81,17 +81,17 @@ def process_data(
             # Add to training set
             train_labels.append(labels)
             train_values.append(values)
-            train_classes.append([anomaly_causes.index(cause)] * len(labels))
+            train_classes.append([ANOMALY_CAUSES.index(cause)] * len(labels))
         elif per_cause_cnt[cause] in val_ids:
             # Add to validation set
             val_labels.append(labels)
             val_values.append(values)
-            val_classes.append([anomaly_causes.index(cause)] * len(labels))
+            val_classes.append([ANOMALY_CAUSES.index(cause)] * len(labels))
         else:
             # Add to testing set
             test_labels.append(labels)
             test_values.append(values)
-            test_classes.append([anomaly_causes.index(cause)] * len(labels))
+            test_classes.append([ANOMALY_CAUSES.index(cause)] * len(labels))
 
     processed_data = {
         "train": train_values,

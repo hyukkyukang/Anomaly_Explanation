@@ -44,17 +44,17 @@ python scripts/dataset/download_datasets.py --download_all
 
 Convert DBSherlock data (.mat file to .json file):
 ```bash
-python src/data_factory/dbsherlock/convert.py \
+python src/DBAnomTransformer/data_factory/convert_dbsherlock.py \
     --input dataset/dbsherlock/tpcc_16w.mat \
     --out_dir dataset/dbsherlock/converted/ \
     --prefix tpcc_16w
 
-python src/data_factory/dbsherlock/convert.py \
+python src/DBAnomTransformer/data_factory/convert_dbsherlock.py \
     --input dataset/dbsherlock/tpcc_500w.mat \
     --out_dir dataset/dbsherlock/converted/ \
     --prefix tpcc_500w
 
-python src/data_factory/dbsherlock/convert.py \
+python src/DBAnomTransformer/data_factory/convert_dbsherlock.py \
     --input dataset/dbsherlock/tpce_3000.mat \
     --out_dir dataset/dbsherlock/converted/ \
     --prefix tpce_3000
@@ -62,15 +62,15 @@ python src/data_factory/dbsherlock/convert.py \
 
 Convert DBSherlock data into train & validate data for Anomaly Transformer:
 ```bash
-python src/data_factory/dbsherlock/process.py \
+python src/DBAnomTransformer/data_factory/process.py \
     --input_path dataset/dbsherlock/converted/tpcc_16w_test.json \
     --output_path dataset/dbsherlock/processed/tpcc_16w/
 
-python src/data_factory/dbsherlock/process.py \
+python src/DBAnomTransformer/data_factory/process.py \
     --input_path dataset/dbsherlock/converted/tpcc_500w_test.json \
     --output_path dataset/dbsherlock/processed/tpcc_500w/
 
-python src/data_factory/dbsherlock/process.py \
+python src/DBAnomTransformer/data_factory/process.py \
     --input_path dataset/dbsherlock/converted/tpce_3000_test.json \
     --output_path dataset/dbsherlock/processed/tpce_3000/
 ```
