@@ -1,4 +1,5 @@
 import abc
+import math
 import random
 from typing import *
 
@@ -222,18 +223,19 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
             == 1
         ), f"Number of data is different for each cause"
 
-        # Get split indicies
-        num_data_per_cause = len(dataset.get_data_of_cause(dataset.causes[0]))
-        indicies = list(range(num_data_per_cause))
-        random.shuffle(indicies)
-        cut1 = self.data_split_num[0]
-        cut2 = cut1 + self.data_split_num[1]
-        train_indicies = indicies[:cut1]
-        val_indicies = indicies[cut1:cut2]
-
         for cause in dataset.causes:
             if cause in self.skip_causes:
                 continue
+
+            # Get split indices for each cause
+            num_data_per_cause = len(dataset.get_data_of_cause(cause))
+            indices = list(range(num_data_per_cause))
+            random.shuffle(indices)
+            cut1 = math.ceil(self.data_split_num[0] * num_data_per_cause / 10)
+            cut2 = cut1 + math.ceil(self.data_split_num[1] * num_data_per_cause / 10)
+            train_indicies = indices[:cut1]
+            val_indicies = indices[cut1:cut2]
+
             data_of_cause = dataset.get_data_of_cause(cause)
             for id in range(num_data_per_cause):
                 if id in train_indicies:

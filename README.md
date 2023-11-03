@@ -152,7 +152,6 @@ elif dataset_name == "DBS":
 
 # Run inference (detect anomaly)
 anomaly_score, is_anomaly, anomaly_cause = detector.infer(data=dummy_data)
-
 ```
 
 Note that the dataset folder should be organized as follows:
