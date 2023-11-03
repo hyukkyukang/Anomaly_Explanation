@@ -31,9 +31,9 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--anormly_ratio=1.0",
+                "--anormly_ratio=1",
                 "--num_epochs=100",
-                "--batch_size=512",
+                "--batch_size=1024",
                 "--mode=test",
                 "--dataset=DBS",
                 // "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",

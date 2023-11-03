@@ -154,6 +154,7 @@ if __name__ == "__main__":
     )
 
     print(f"dim: {dim}")
+    print(f"accuracy for that: {accuracy}")
     print(f"percentile for that: {percentile}")
     print(f"recall score: {recall}")
     print(f"precision score: {precision}")
