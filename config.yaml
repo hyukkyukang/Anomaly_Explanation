@@ -1,7 +1,7 @@
 model:
   win_size: 25
   step_size: 25
-  num_anomaly_cause: 5
+  num_anomaly_cause: 7
   num_feature: 29
   num_e_layer: 3
   k: 3

@@ -20,6 +20,7 @@ ANOMALY_CAUSES = [
     "workload_spike",
     "poor_query",
     "mem",
+    "cpu",
 ]
 
 SKIP_FEATURES = ["timestamp", "cause"]
