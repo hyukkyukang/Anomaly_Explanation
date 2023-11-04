@@ -215,14 +215,6 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
         seed = 0 if seed is None else seed
         random.seed(seed)
 
-        # Check if the same number of data exists for each cause
-        assert (
-            len(
-                set([len(dataset.get_data_of_cause(cause)) for cause in dataset.causes])
-            )
-            == 1
-        ), f"Number of data is different for each cause"
-
         for cause in dataset.causes:
             if cause in self.skip_causes:
                 continue

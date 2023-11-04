@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "DBAnomTransformer"
-version = "0.1.8"
+version = "0.1.9"
 authors = [{name="Hyukkyu Kang", email="hyukkyukang@gmail.com"}]
 description = "A collection of useful util functions"
 readme = "README.md"
