@@ -47,7 +47,9 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
         self.mode = mode
         self.step = step
         self.win_size = win_size
-        self.data_split_num = data_split_num if data_split_num else (8, 1, 2)
+        self.data_split_num = (
+            data_split_num if data_split_num else (8 / 11, 1 / 11, 2 / 11)
+        )
         self.time_segments: List[TimeSegment] = []
         self.scaler = scaler if scaler else StandardScaler()
         self.__post__init__(scaler=scaler)
@@ -223,8 +225,8 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
             num_data_per_cause = len(dataset.get_data_of_cause(cause))
             indices = list(range(num_data_per_cause))
             random.shuffle(indices)
-            cut1 = math.ceil(self.data_split_num[0] * num_data_per_cause / 10)
-            cut2 = cut1 + math.ceil(self.data_split_num[1] * num_data_per_cause / 10)
+            cut1 = math.ceil(self.data_split_num[0] * num_data_per_cause)
+            cut2 = cut1 + math.ceil(self.data_split_num[1] * num_data_per_cause)
             train_indicies = indices[:cut1]
             val_indicies = indices[cut1:cut2]
 

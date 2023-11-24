@@ -342,7 +342,11 @@ def get_distances(
     return distances
 
 
-def calculate_classification_accuracy(cls_probs, classes, labels) -> Tuple[int, int]:
+def calculate_classification_accuracy(
+    cls_probs: Union[np.ndarray, torch.Tensor],
+    classes: Union[np.ndarray, torch.Tensor],
+    labels: List[int],
+) -> Tuple[int, int]:
     if type(cls_probs) == np.ndarray and len(cls_probs.shape) == 1:
         predicted = cls_probs
         gold = classes
