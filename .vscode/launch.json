@@ -8,9 +8,12 @@
             "name": "Python: Train DBSherlock",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py",
+            "program": "${workspaceFolder}/src/DBAnomTransformer/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1"
+            },
             "args": [
                 "--anormly_ratio=4",
                 "--num_epochs=100",
@@ -19,25 +22,28 @@
                 "--dataset=DBS",
                 "--win_size=25",
                 "--step_size=25",
-                // "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
-                "--dataset_path=dataset/dbsherlock/converted/tpce_3000_test.json",
+                "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
+                // "--dataset_path=dataset/dbsherlock/converted/tpce_3000_test.json",
             ]
         },
         {
             "name": "Python: Test DBSherlock",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/main.py",
+            "program": "${workspaceFolder}/src/DBAnomTransformer/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1"
+            },
             "args": [
                 "--anormly_ratio=1",
                 "--num_epochs=100",
                 "--batch_size=1024",
                 "--mode=test",
                 "--dataset=DBS",
-                // "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
-                "--dataset_path=dataset/dbsherlock/converted/tpce_3000_test.json",
+                "--dataset_path=dataset/dbsherlock/converted/tpcc_500w_test.json",
+                // "--dataset_path=dataset/dbsherlock/converted/tpce_3000_test.json",
                 "--win_size=25",
                 "--step_size=25",
             ]
@@ -113,6 +119,18 @@
                 "--dataset_path=dataset/EDA/",
                 "--output_path=dataset/EDA/",
             ]
+        },
+        {
+            "name": "Python: test inference",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/test_inference.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1"
+            },
+            "args": []
         },
     ]
 }

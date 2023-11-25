@@ -299,6 +299,7 @@ class DBAnomDector:
 
         return np.average(loss_1), np.average(loss_2), np.average(loss_3), accuracy
 
+    @torch.no_grad()
     def infer(self, data: pd.DataFrame) -> Tuple[List[float], List[bool], List[int]]:
         self.model.eval()
         # Preprocess data
