@@ -15,7 +15,10 @@ from sklearn.preprocessing import StandardScaler
 from DBAnomTransformer.config.utils import default_config, recursive_override
 from DBAnomTransformer.data_factory.data import AnomalyData
 from DBAnomTransformer.data_factory.dataloader import get_dataloader
-from DBAnomTransformer.data_factory.dataset.base import AnomalyTransformerDataset
+from DBAnomTransformer.data_factory.dataset.base import (
+    AnomalyTransformerDataset,
+    TimeSegment,
+)
 from DBAnomTransformer.model.AnomalyTransformer import AnomalyTransformer
 from DBAnomTransformer.solver import (
     EarlyStopping,
@@ -304,9 +307,14 @@ class DBAnomDector:
         self.model.eval()
         # Preprocess data
         anomaly_data = AnomalyData.from_dataframe(data)
-        segments = AnomalyTransformerDataset.create_time_segments(
-            data=anomaly_data, win_size=self.config.model.win_size, anomaly_causes=[]
+        segments: List[TimeSegment] = AnomalyTransformerDataset.create_time_segments(
+            data=anomaly_data, win_size=self.config.model.win_size
         )
+
+        # Scale values
+        for segment in segments:
+            segment.value = self.scaler.transform(segment.value)
+
         # To batch
         attens_energy = []
         cls_preds = []

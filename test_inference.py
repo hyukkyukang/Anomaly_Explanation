@@ -10,6 +10,7 @@ from omegaconf import OmegaConf
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 from DBAnomTransformer.config.utils import default_config
+from DBAnomTransformer.data_factory.dataset.dbsherlock import ANOMALY_CAUSES
 from DBAnomTransformer.detector import DBAnomDector
 from DBAnomTransformer.solver import detect_adjustment
 
@@ -79,7 +80,11 @@ def read_in_dbsherlock_data() -> np.ndarray:
         values_as_df = pd.DataFrame(values, columns=data["attributes"][2:])
 
         # Run inference (detect anomaly)
-        anomaly_score, is_anomaly, anomaly_cause = detector.infer(data=values_as_df)
+        anomaly_score, is_anomaly, anomaly_cause = detector.infer(
+            data=values_as_df,
+            possible_anomaly_causes=ANOMALY_CAUSES,
+            tmp_gold_cause=data["cause"],
+        )
 
         ab_regions = data["abnormal_regions"]
         assert (
@@ -105,6 +110,24 @@ def read_in_dbsherlock_data() -> np.ndarray:
         print(
             f"After acc: {acc} precision: {precision} recall: {recall} f_score: {f_score}"
         )
+        # Compute cause classification accuracy
+        # Extract causes from only the anomaly regions
+        extracted_cause_pred = []
+        print(anomaly_cause)
+        for i in range(len(ab_regions)):
+            if ab_regions[i]:
+                extracted_cause_pred.append(anomaly_cause[i])
+        cause_gold = [ANOMALY_CAUSES.index(data["cause"]) for i in extracted_cause_pred]
+        # Compute accuracy
+        correct_cnt = sum(
+            [
+                1
+                for c_gold, c_pred in zip(cause_gold, extracted_cause_pred)
+                if c_gold == c_pred
+            ]
+        )
+        cause_acc = correct_cnt / len(cause_gold)
+        print(f"Cause_acc: {cause_acc}")
 
 
 def main():

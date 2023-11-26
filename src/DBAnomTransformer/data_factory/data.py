@@ -74,12 +74,14 @@ class AnomalyData:
         return self.values_as_np[training_indices:]
 
     @classmethod
-    def from_dataframe(self, dataframe: pd.DataFrame) -> "AnomalyData":
+    def from_dataframe(
+        self, dataframe: pd.DataFrame, anomaly_cause: Optional[str] = ""
+    ) -> "AnomalyData":
         """Create AnomalyData from pandas dataframe"""
         attributes = list(dataframe.columns)
         values = dataframe.to_numpy().tolist()
         return AnomalyData(
-            cause="",
+            cause=anomaly_cause,
             attributes=attributes,
             values=values,
             normal_regions=[],

@@ -367,17 +367,6 @@ def calculate_classification_accuracy(
     )
     cls_total_num_cnt = len(predicted_for_anomaly_regions)
 
-    (
-        cls_precision,
-        cls_recall,
-        cls_f_score,
-        cls_support,
-    ) = precision_recall_fscore_support(
-        gold_for_anomaly_regions,
-        predicted_for_anomaly_regions,
-        average="micro",
-    )
-
     return cls_correct_cnt, cls_total_num_cnt
 
 
@@ -819,23 +808,25 @@ class Solver(object):
             avg_train_loss = np.average(loss1_list)
 
             # Compute validateion loss and accuracy
-            vali_loss1, vali_loss2, vali_loss3, accuracy = self.vali(self.test_loader)
+            vali_loss1, vali_loss2, vali_loss3, cls_accuracy = self.vali(
+                self.test_loader
+            )
             self.model.train()
 
             logger.info(
-                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Vali acc: {4:.7f} ".format(
+                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Vali cause acc: {4:.7f} ".format(
                     epoch + 1,
                     len(self.train_loader),
                     avg_train_loss,
                     vali_loss1,
-                    accuracy,
+                    cls_accuracy,
                 )
             )
             early_stopping(
                 vali_loss1,
                 vali_loss2,
                 vali_loss3,
-                accuracy,
+                cls_accuracy,
                 self.model,
                 self.train_loader.dataset.scaler,
                 self.model_save_path,
@@ -908,9 +899,9 @@ class Solver(object):
             cls_correct_cnt += correct_cnt
             cls_num_cnt += total_cnt
 
-        accuracy = cls_correct_cnt / cls_num_cnt if cls_num_cnt else 0
+        cls_accuracy = cls_correct_cnt / cls_num_cnt if cls_num_cnt else 0
 
-        return np.average(loss_1), np.average(loss_2), np.average(loss_3), accuracy
+        return np.average(loss_1), np.average(loss_2), np.average(loss_3), cls_accuracy
 
     @torch.no_grad()
     def test(self):

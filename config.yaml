@@ -17,7 +17,7 @@ add_stats: true
 output_path: results/
 model_path: checkpoints/EDA_checkpoint.pth
 scaler_path: checkpoints/EDA_scaler.pkl
-stats_path: checkpoints/EDA_stats.json
+stats_path: checkpoints/EDA_config.json
 anomaly_ratio: 0.5
 device: cuda
 train:

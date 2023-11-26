@@ -111,7 +111,9 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
             segments_for_fitting = list_utils.do_flatten_list(
                 [
                     self.create_time_segments(
-                        d, win_size=self.win_size, anomaly_causes=self.anomaly_causes
+                        d,
+                        win_size=self.win_size,
+                        possible_anomaly_causes=self.anomaly_causes,
                     )
                     for d in data_for_fitting
                 ]
@@ -122,7 +124,9 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
             time_segments = list_utils.do_flatten_list(
                 [
                     self.create_time_segments(
-                        d, win_size=self.win_size, anomaly_causes=self.anomaly_causes
+                        d,
+                        win_size=self.win_size,
+                        possible_anomaly_causes=self.anomaly_causes,
                     )
                     for d in data_list
                 ]
@@ -159,7 +163,7 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
         self,
         data: AnomalyData,
         win_size: int,
-        anomaly_causes: Optional[List[str]] = None,
+        possible_anomaly_causes: Optional[List[str]] = None,
     ) -> List[TimeSegment]:
         segments: List[TimeSegment] = []
         total_time = len(data.values)
@@ -188,8 +192,8 @@ class AnomalyTransformerDataset(torch.utils.data.Dataset):
                 idx in data.valid_abnormal_regions
                 for idx in range(start_time, end_time)
             ]
-            if anomaly_causes:
-                cause = anomaly_causes.index(data.cause)
+            if possible_anomaly_causes:
+                cause = possible_anomaly_causes.index(data.cause)
             else:
                 cause = 0
             anomaly_cause = [cause if is_anomaly[idx] else 0 for idx in range(win_size)]
