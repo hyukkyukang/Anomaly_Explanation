@@ -303,7 +303,9 @@ class DBAnomDector:
         return np.average(loss_1), np.average(loss_2), np.average(loss_3), accuracy
 
     @torch.no_grad()
-    def infer(self, data: pd.DataFrame) -> Tuple[List[float], List[bool], List[int]]:
+    def infer(
+        self, data: pd.DataFrame, post_process_cause: bool = True
+    ) -> Tuple[List[float], List[bool], List[int]]:
         self.model.eval()
         # Preprocess data
         anomaly_data = AnomalyData.from_dataframe(data)
@@ -380,9 +382,36 @@ class DBAnomDector:
         pred_is_anomaly = pred_is_anomaly[overlapping_flags == 0]
         pred_anomaly_cause = cls_preds[overlapping_flags == 0]
 
-        # Post processing
+        # Format output
         score = attens_energy.tolist()
         pred_is_anomaly = pred_is_anomaly.tolist()
+
+        # Post processing
+        # 1. Choose only top 5 anomaly score
+        top_vals, top_indices = torch.topk(torch.tensor(attens_energy), k=5)
+        assert top_vals[-1] > 0, "Need to set default value smaller than zero"
+        for i in range(len(attens_energy)):
+            if i not in top_indices:
+                pred_is_anomaly[i] = 0
+        # 2. Remove anomaly cause if the region is not anomaly
+        if post_process_cause:
+            for i in range(len(pred_anomaly_cause)):
+                if not pred_is_anomaly[i]:
+                    pred_anomaly_cause[i] = 0
+        # 3. If there are consecutive anomaly cause, mark them all as anomaly
+        prev_ano_cause = -1
+        start_idx = -1
+        for i, pred_cause in enumerate(pred_anomaly_cause):
+            if pred_cause != 0:
+                if prev_ano_cause == pred_cause:
+                    # Update pred_is_anomaly
+                    for j in range(start_idx, i):
+                        pred_anomaly_cause[j] = pred_cause
+                        pred_is_anomaly[j] = True
+                else:
+                    # Update start_idx
+                    start_idx = i
+                    prev_ano_cause = pred_cause
 
         return score, pred_is_anomaly, pred_anomaly_cause
 

@@ -74,17 +74,13 @@ def read_in_dbsherlock_data() -> np.ndarray:
 
     dataset = file_utils.read_json_file(file_path)["data"]
     # for data in tqdm.tqdm(dataset):
-    # dataset = dataset[15:16]
+    # dataset = dataset[0:1]
     for idx, data in enumerate(dataset):
         values = np.array(data["values"])[:, 2:]
         values_as_df = pd.DataFrame(values, columns=data["attributes"][2:])
 
         # Run inference (detect anomaly)
-        anomaly_score, is_anomaly, anomaly_cause = detector.infer(
-            data=values_as_df,
-            possible_anomaly_causes=ANOMALY_CAUSES,
-            tmp_gold_cause=data["cause"],
-        )
+        anomaly_score, is_anomaly, anomaly_cause = detector.infer(data=values_as_df)
 
         ab_regions = data["abnormal_regions"]
         assert (
