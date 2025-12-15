@@ -394,9 +394,11 @@ def compute_loss(
     prior: List[torch.Tensor],
     win_size: int,
     k: int = 3,
+    cls_loss_weight: float = 1.0,  # Weight multiplier for classification loss
 ) -> Tuple[float, float, float]:
     criterion = nn.MSELoss()
-    cross_entropy = nn.CrossEntropyLoss()
+    # Add label smoothing to reduce overconfidence and improve generalization
+    cross_entropy = nn.CrossEntropyLoss(label_smoothing=0.1)
     softmax = nn.Softmax(dim=2)
     # calculate Association discrepancy
     series_loss, prior_loss = compute_series_prior_loss(
@@ -429,7 +431,8 @@ def compute_loss(
 
     loss1 = rec_loss - k * series_loss
     loss2 = rec_loss + k * prior_loss
-    loss3 = classification_loss
+    # Apply weight to classification loss to emphasize root cause identification
+    loss3 = cls_loss_weight * classification_loss
 
     return loss1, loss2, loss3
 
@@ -795,6 +798,7 @@ class Solver(object):
                     prior=prior,
                     win_size=self.win_size,
                     k=self.k,
+                    cls_loss_weight=5.0,  # Emphasize classification loss
                 )
 
                 loss1_list.append(loss1.item())
@@ -809,7 +813,7 @@ class Solver(object):
 
             # Compute validateion loss and accuracy
             vali_loss1, vali_loss2, vali_loss3, cls_accuracy = self.vali(
-                self.test_loader
+                self.val_loader
             )
             self.model.train()
 

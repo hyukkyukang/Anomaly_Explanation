@@ -103,7 +103,16 @@ class AnomalyTransformer(nn.Module):
         )
 
         self.projection = nn.Linear(d_model, c_out, bias=True)
-        self.class_projection = nn.Linear(d_model, n_classes, bias=True)
+        # Deeper classification head with MLP for better root cause identification
+        self.class_projection = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model // 2, d_model // 4),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model // 4, n_classes),
+        )
 
     def forward(self, x):
         enc_out = self.embedding(x)
