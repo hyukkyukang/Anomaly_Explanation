@@ -595,8 +595,8 @@ class EarlyStopping:
         self.best_score3 = None
         self.best_accuracy = None
         self.early_stop = False
-        self.val_loss_min = np.Inf
-        self.val_loss2_min = np.Inf
+        self.val_loss_min = np.inf
+        self.val_loss2_min = np.inf
         self.delta = delta
         self.dataset = dataset_name
 
