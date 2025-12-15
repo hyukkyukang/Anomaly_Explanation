@@ -25,7 +25,8 @@ def main(config):
     if config.mode == "train":
         solver.train()
     elif config.mode == "test":
-        solver.test()
+        _, _, _, _, after_acc = solver.test()
+        print(f"Acc: {after_acc}")
     elif config.mode == "infer":
         # Load data to infer
         data_path = "dataset/EDA/raw_data/workload_spike_1.csv"

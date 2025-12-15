@@ -87,6 +87,7 @@ def find_best_threshold(
                         precision,
                         recall,
                         f_score,
+                        _,
                     ) = get_metrics_for_threshold(
                         val_energy_with_distances,
                         val_labels,
@@ -105,7 +106,7 @@ def find_best_threshold(
         for anomaly_ratio in ar_range:
             logger.info(f"Anomaly Ratio: {anomaly_ratio}")
             thresh = np.percentile(val_energy, 100 - anomaly_ratio)
-            accuracy, precision, recall, f_score = get_metrics_for_threshold(
+            accuracy, precision, recall, f_score, _ = get_metrics_for_threshold(
                 val_energy,
                 val_labels,
                 thresh,
@@ -180,12 +181,14 @@ def get_metrics_for_threshold(
         logger.info(
             f"Before acc: {before_correct_cnt / before_total_cnt} ({before_correct_cnt}/{before_total_cnt})"
         )
+    after_acc: float = 0.0
     if after_total_cnt:
+        after_acc = after_correct_cnt / after_total_cnt
         logger.info(
-            f"After acc: {after_correct_cnt / after_total_cnt} ({after_correct_cnt}/{after_total_cnt})"
+            f"After acc: {after_acc} ({after_correct_cnt}/{after_total_cnt})"
         )
 
-    return accuracy, precision, recall, f_score
+    return accuracy, precision, recall, f_score, after_acc
 
 
 def explanation_adjustment(
@@ -988,7 +991,7 @@ class Solver(object):
                 test_energy = test_energy + stats_weight * stats
 
         # Evaluate
-        accuracy, precision, recall, f_score = get_metrics_for_threshold(
+        accuracy, precision, recall, f_score, after_acc = get_metrics_for_threshold(
             test_energy,
             test_labels,
             anomaly_threshold,
@@ -996,7 +999,7 @@ class Solver(object):
             cls_golds=cls_golds,
             is_overlapping=overlapping_flags,
         )
-        return accuracy, precision, recall, f_score
+        return accuracy, precision, recall, f_score, after_acc
 
     @torch.no_grad()
     def infer(self, data_path: str) -> Any:

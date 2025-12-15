@@ -4,7 +4,7 @@ services:
     AnomalyExp:
         shm_size: 4gb
         image: hyukkyukang/anomaly_explanation:latest
-        container_name: AnomalyExp
+        container_name: DBAdminBot-AnomalyExplain
         stdin_open: true
         tty: true
         network_mode: "host"
